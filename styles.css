@@ -134,3 +134,4 @@ label.lab { display: flex; flex-direction: column; gap: 4px; font-size: 12px; fo
 .story p { margin: 0 0 10px; font-size: 15px; line-height: 1.65; }
 .badge { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 1px 8px; border: 1.5px solid currentColor; }
 @media (prefers-reduced-motion: reduce) { .tile-anim, .sun, .dot, .pop { animation: none; } }
+.mk svg { width: 18px; height: 18px; stroke: #fff; }

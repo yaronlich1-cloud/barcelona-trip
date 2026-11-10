@@ -5,50 +5,60 @@ window.TRIP = {
   days: [
     { date: '2026-12-13', num: '13', short: 'ראשון', color: '#E8553D', title: 'הרובע הגותי ואל בורן', stops: [
       { kind: 'hotel', name: 'המלון', note: 'צ׳ק־אין והתמקמות', hotelRef: true },
-      { kind: 'food', name: 'Teresa Carles', note: 'צהריים טבעוני · ללא גלוטן', lat: 41.3846, lng: 2.1683 },
+      { kind: 'food', name: 'Teresa Carles', note: 'צהריים · Jovellanos 2', lat: 41.38508, lng: 2.16801 },
       { kind: 'walk', name: 'הרובע הגותי ו־El Call', story: 'gotic', note: 'הקתדרלה והרובע היהודי', lat: 41.3830, lng: 2.1750, wiki: 'Barri_Gòtic' },
       { kind: 'shop', name: 'אל בורן', story: 'born', note: 'בוטיקים ואווירת חג', lat: 41.3846, lng: 2.1826, wiki: 'El_Born', rule: 'shops' }
     ]},
     { date: '2026-12-14', num: '14', short: 'שני', color: '#1E9E8F', title: 'ארמון, פארק ונמל', stops: [
-      { kind: 'gaudi', name: 'Palau Güell', story: 'palauguell', note: 'הארמון של גאודי', lat: 41.3789, lng: 2.1741, wiki: 'Palau_Güell', rule: 'closedMonday' },
+      { kind: 'gaudi', name: 'Palau Güell', story: 'palauguell', note: 'הארמון של גאודי', lat: 41.3789, lng: 2.1741, wiki: 'Palau_Güell', rule: 'palauguell' },
       { kind: 'arch', name: 'שער הניצחון', story: 'arc', note: 'השדרה אל הפארק', lat: 41.3910, lng: 2.1806, wiki: 'Arc_de_Triomf' },
       { kind: 'park', name: 'פארק המצודה', story: 'ciutadella', note: 'המזרקה והאגם', lat: 41.3881, lng: 2.1874, wiki: 'Parc_de_la_Ciutadella' },
       { kind: 'port', name: 'Port Vell', story: 'portvell', note: 'אווירת נמל', lat: 41.3755, lng: 2.1820, wiki: 'Port_Vell' },
-      { kind: 'bar', name: 'Monk Barcelona', note: 'בר סודי מאחורי מכולת' }
+      { kind: 'bar', name: 'Monk Barcelona', note: 'בר סודי מאחורי מכולת · Abaixadors 10', lat: 41.38330, lng: 2.18147 }
     ]},
     { date: '2026-12-15', num: '15', short: 'שלישי', color: '#2453C9', title: 'שיא גאודי ומופע לילה', stops: [
       { kind: 'gaudi', name: 'Sagrada Família', story: 'sagrada', note: 'סיור פנימי ועלייה למגדלים', lat: 41.4036, lng: 2.1744, wiki: 'Sagrada_Família' },
       { kind: 'park', name: 'Park Güell', story: 'parkguell', note: 'מרפסת הפסיפס', lat: 41.4145, lng: 2.1527, wiki: 'Park_Güell' },
-      { kind: 'food', name: 'Roots & Rolls', note: 'סושי טבעוני · ללא גלוטן' },
+      { kind: 'food', name: 'Roots & Rolls', note: 'סושי טבעוני · Consell de Cent 401', lat: 41.39536, lng: 2.17110 },
       { kind: 'show', name: 'Casa Milà', story: 'pedrera', note: 'מופע לילה על הגג', lat: 41.3953, lng: 2.1619, wiki: 'Casa_Milà' }
     ]},
     { date: '2026-12-16', num: '16', short: 'רביעי', color: '#D99400', title: 'בוקריה, שקיעה ופלמנקו', stops: [
       { kind: 'market', name: 'La Boqueria', story: 'boqueria', note: 'מיצים ופירות', lat: 41.3817, lng: 2.1717, wiki: 'Mercat_de_Sant_Josep_de_la_Boqueria', rule: 'closedSunday' },
-      { kind: 'view', name: 'מונז׳ואיק ו־MNAC', story: 'montjuic', note: 'השקיעה הכי יפה בעיר', lat: 41.3685, lng: 2.1534, wiki: 'Museu_Nacional_d%27Art_de_Catalunya', rule: 'closedMonday' },
+      { kind: 'view', name: 'מונז׳ואיק ו־MNAC', story: 'montjuic', note: 'השקיעה הכי יפה בעיר', lat: 41.3685, lng: 2.1534, wiki: 'Museu_Nacional_d%27Art_de_Catalunya', rule: 'mnac', info: 'fountain' },
       { kind: 'show', name: 'Tablao Flamenco Cordobes', story: 'flamenco', note: 'מופע פלמנקו', lat: 41.3792, lng: 2.1746 }
     ]},
     { date: '2026-12-17', num: '17', short: 'חמישי', color: '#C2417F', title: 'שופינג וטיסה הביתה', stops: [
       { kind: 'shop', name: 'Passeig de Gràcia', story: 'gracia', note: 'קניות אחרונות', lat: 41.3936, lng: 2.1634, wiki: 'Passeig_de_Gràcia', rule: 'shops' },
-      { kind: 'food', name: 'Honest Greens', note: 'צהריים טבעוני · ללא גלוטן' },
+      { kind: 'food', name: 'Honest Greens', note: 'צהריים · Gran de Gràcia 30', lat: 41.39870, lng: 2.15699 },
       { kind: 'plane', name: 'מהמלון לשדה', note: 'איסוף מזוודות ויציאה', hotelRef: true, keepName: true }
     ]}
   ],
-  // Opening-hours rules. Each needs verifying against the official site before the trip.
+  // Opening-hours rules, checked against several sources on 10.11.2026. Re-check the official sites a week before the trip.
   rules: {
-    closedSunday: { closed: [0], text: 'סגור בימי ראשון' },
-    closedMonday: { closed: [1], text: 'ייתכן שסגור בימי שני' },
+    closedSunday: { closed: [0], text: 'סגור בימי ראשון', hours: 'שני–שבת, בבוקר עד הערב' },
+    palauguell: { closed: [1], text: 'סגור בימי שני (חוץ מחגים)', hours: 'בחורף 10:00–17:30, כניסה אחרונה 16:30', src: 'https://www.barcelona.de/en/barcelona-palau-guell.html' },
+    mnac: { closed: [1], text: 'המוזיאון סגור בימי שני (חוץ מחגים)', hours: 'בחורף: שלישי–שבת 10:00–18:00, ראשון 10:00–15:00', src: 'https://www.museunacional.cat/en' },
     shops: { closed: [0], text: 'רוב החנויות סגורות בימי ראשון' }
+  },
+  // Things worth knowing on a given day that are not closures.
+  infos: {
+    fountain: { days: [4, 5, 6], text: 'המזרקה הקסומה (Font Màgica) פועלת בחורף רק בחמישי–שבת, בערך מ־20:00', src: 'https://www.barcelona.com/barcelona-theme-park/magic-fountain' }
   },
   discover: {
     food: [
-      { name: 'Teresa Carles', note: 'טבעוני · תפריט ללא גלוטן', area: 'Eixample', kind: 'food', verify: true },
-      { name: 'Roots & Rolls', note: 'סושי טבעוני · GF', area: 'Eixample', kind: 'food', verify: true },
-      { name: 'Honest Greens', note: 'בריא · אפשרויות טבעוניות ו־GF', area: 'כמה סניפים', kind: 'food', verify: true },
-      { name: 'Flax & Kale', note: 'צמחוני־טבעוני · אפשרויות GF', area: 'El Raval', kind: 'food', verify: true }
+      { name: 'Teresa Carles', note: 'צמחוני, הרבה מנות טבעוניות ואפשרויות ללא גלוטן', area: 'El Raval · Jovellanos 2', kind: 'food', lat: 41.38508, lng: 2.16801, src: 'https://timeout.com/barcelona/restaurants/teresa-carles' },
+      { name: 'Flax & Kale Passage', note: 'תפריט שבנוי גם לללא גלוטן, כולל פיצות GF ידידותיות לטבעונים', area: 'Sant Pere · Sant Pere Més Alt 31', kind: 'food', lat: 41.38842, lng: 2.17652, src: 'https://www.timeout.com/barcelona/restaurants/flax-kale-passage' },
+      { name: 'Roots & Rolls', note: 'סושי טבעוני', area: 'Eixample · Consell de Cent 401', kind: 'food', lat: 41.39536, lng: 2.17110, src: 'https://ajuntament.barcelona.cat/comerc/en/roots-rolls', verify: 'לשאול על אפשרויות ללא גלוטן' },
+      { name: 'Honest Greens (Born)', note: 'בריא ומהיר, מסומן מה טבעוני ומה ללא גלוטן', area: 'El Born · Pla de Palau 11', kind: 'food', lat: 41.38343, lng: 2.18321, src: 'https://www.honestgreens.com/en/restaurants/born-en' },
+      { name: 'Honest Greens (Gràcia)', note: 'אותה רשת, ליד Passeig de Gràcia', area: 'Gràcia · Gran de Gràcia 30', kind: 'food', lat: 41.39870, lng: 2.15699, src: 'https://www.honestgreens.com/en/restaurants/gdg-en' },
+      { name: 'Hanai Vegana', note: 'מאפייה טבעונית וללא גלוטן לגמרי, לבראנץ׳ ומתוקים', area: 'El Born · Carders 28', kind: 'food', lat: 41.38679, lng: 2.18030, src: 'https://www.happycow.net/reviews/hanai-vegana-barcelona-122320', verify: 'פתוח בדרך כלל רביעי–ראשון' },
+      { name: 'Mad Mad Vegan', note: 'טבעוני, המבורגרים וטאקו, יש אפשרויות ללא גלוטן', area: 'Eixample · Aribau 65', kind: 'food', lat: 41.38871, lng: 2.15870, src: 'https://www.timeout.es/barcelona/es/restaurantes/mad-mad-vegan-barcelona' },
+      { name: 'Asante Café', note: 'בראנץ׳ טבעוני לגמרי. לחם ללא גלוטן לפי מלאי, הקינוחים לא GF', area: 'Sants · Elkano 63', kind: 'food', lat: 41.37401, lng: 2.16016, src: 'https://www.happycow.net/reviews/asante-barcelona-407671', verify: 'פתוח רק בחלק מימות השבוע, עד אחר הצהריים' }
     ],
     bars: [
-      { name: 'Monk Barcelona', note: 'קוקטיילים · בר נסתר', area: '', kind: 'bar', verify: true },
-      { name: 'Paradiso', note: 'קוקטיילים · כניסה דרך מקרר', area: 'El Born', kind: 'bar', verify: true }
+      { name: 'Monk Barcelona', note: 'קוקטיילים בבר נסתר מאחורי חנות מכולת', area: 'El Born · Abaixadors 10', kind: 'bar', lat: 41.38330, lng: 2.18147, src: 'https://www.diffordsguide.com/bars/z268Az/monk' },
+      { name: 'Paradiso', note: 'נכנסים דרך מקרר בבר פסטרמה. מקום 4 ברשימת 50 הברים הטובים בעולם 2025', area: 'El Born · Rera Palau 4', kind: 'bar', lat: 41.38367, lng: 2.18370, src: 'https://www.theworlds50best.com/bars/best-in-the-world/the-list/paradiso.html' },
+      { name: 'Sips', note: 'מקום 3 ברשימת 50 הברים הטובים בעולם 2025. כדאי להגיע מוקדם', area: 'Eixample · Muntaner', kind: 'bar', lat: 41.38887, lng: 2.15672, src: 'https://www.timeout.com/news/the-worlds-50-best-bars-have-just-been-announced-for-2025-heres-the-top-10-100825' }
     ],
     tops: [
       { name: 'Bunkers del Carmel', note: 'התצפית הכי יפה על העיר', area: 'El Carmel', kind: 'view', lat: 41.4189, lng: 2.1617 },

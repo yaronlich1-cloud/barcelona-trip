@@ -64,12 +64,17 @@ let S;
 try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fresh(); }
 (function migrate() {
   const byName = {}; T.days.forEach((d) => d.stops.forEach((s) => { byName[s.name] = s; }));
-  S.days.forEach((d) => d.stops.forEach((s) => { const src = byName[s.name]; if (src) ['story', 'wiki', 'rule'].forEach((k) => { if (src[k] && !s[k]) s[k] = src[k]; }); }));
+  S.days.forEach((d) => d.stops.forEach((s) => {
+    const src = byName[s.name]; if (!src) return;
+    ['story', 'wiki', 'info'].forEach((k) => { if (src[k] && !s[k]) s[k] = src[k]; });
+    if (src.rule && (!s.rule || !T.rules[s.rule])) s.rule = src.rule;
+    if (src.lat != null && s.lat == null && !s.hotelRef) { s.lat = src.lat; s.lng = src.lng; }
+  }));
   if (!S.hotel) S.hotel = { name: '', address: '', lat: null, lng: null };
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '4 · 11.11';
+const VERSION = '5 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -86,6 +91,21 @@ function todayIdx() { const t = new Date(); const iso = `${t.getFullYear()}-${St
 function curIdx() { const t = todayIdx(); return S.dayIdx != null ? S.dayIdx : (t >= 0 ? t : 0); }
 function daysToFlight() { const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((new Date(2026, 11, 13) - t) / 864e5); }
 function closedNote(stop, date) { const r = stop.rule && T.rules[stop.rule]; return r && r.closed.includes(dow(date)) ? r.text : ''; }
+function infoNote(stop, date) { const n = stop.info && T.infos && T.infos[stop.info]; return n && !n.days.includes(dow(date)) ? n.text : ''; }
+function hoursOf(stop) { const r = stop.rule && T.rules[stop.rule]; return r && r.hours ? r.hours : ''; }
+// The open day whose stops are closest to this one: where it fits best on the map.
+function suggestDay(stop, from) {
+  const r = stop.rule && T.rules[stop.rule]; let best = null, bestD = Infinity;
+  META.forEach((m, k) => {
+    if (k === from || (r && r.closed.includes(dow(m.date)))) return;
+    const geo = S.days[k].stops.filter((x) => hasGeo(x) && x.id !== stop.id);
+    const d = hasGeo(stop) && geo.length ? Math.min(...geo.map((x) => km(stop, x))) : 99;
+    if (d < bestD) { bestD = d; best = k; }
+  });
+  return best;
+}
+const fmtKm = (k) => (k < 1 ? `${Math.round(k * 1000)} מ׳` : `${k.toFixed(1)} ק״מ`);
+function nearest(list, from, n) { return list.filter(hasGeo).map((x) => ({ ...x, dist: km(from, x) })).sort((p, q) => p.dist - q.dist).slice(0, n); }
 function legInfo(a, b) {
   if (!hasGeo(a) || !hasGeo(b)) return { walk: null, transit: null, rec: 'walk' };
   const k = km(a, b); const walk = Math.max(3, Math.round(k * 1.3 / 4.8 * 60)); const transit = Math.round(k * 1.3 / 18 * 60 + 8);
@@ -163,7 +183,13 @@ V.today = () => {
   const i = curIdx(); const m = META[i]; const day = S.days[i]; setDayColor(i);
   const dtf = daysToFlight();
   const chips = `<div class="chips"><span class="chip">${dtf > 0 ? `עוד ${dtf} ימים לטיסה` : dtf > -5 ? `יום ${1 - dtf} מתוך 5` : 'הטיול הסתיים'}</span><span class="chip dark">${wx(m.date) || 'ממוצע בדצמבר: 9°–15°'}</span></div>`;
-  const warns = day.stops.map((s) => closedNote(s, m.date) ? `<div class="warn">${ic('warn')}<span><b>${esc(s.name)}:</b> ${closedNote(s, m.date)} (${m.short}). כדאי להעביר ליום אחר. <a href="#places">להעברה</a></span></div>` : '').join('');
+  const warns = day.stops.map((s) => {
+    const cn = closedNote(s, m.date); const inf = infoNote(s, m.date);
+    let h = '';
+    if (cn) { const to = suggestDay(s, i); h += `<div class="warn">${ic('warn')}<span class="grow"><b>${esc(s.name)}:</b> ${cn}, ו־${m.num}.12 הוא יום ${m.short}.${to != null ? `<br><button class="btn sun sm" style="margin-top:6px" data-act="moveTo" data-d="${i}" data-id="${s.id}" data-to="${to}">להעביר ליום ${META[to].short} ${META[to].num}.12</button>` : ''}</span></div>`; }
+    if (inf) h += `<div class="warn" style="background:#EEF2FA;color:var(--navy)">${ic('warn')}<span><b>${esc(s.name)}:</b> ${inf}.</span></div>`;
+    return h;
+  }).join('');
   let flightWarn = '';
   if (i === 4 && S.flights.back.time) { const lb = leaveBy(); flightWarn = `<div class="warn">${ic('plane')}<span>הטיסה ב־${esc(S.flights.back.time)}. צאו מהמלון עד <b>${lb}</b>.</span></div>`; }
   if (weather && weather[m.date] && weather[m.date].rain >= 60 && day.stops.some((s) => ['park', 'view'].includes(s.kind))) {
@@ -210,11 +236,17 @@ function leaveBy() {
 /* map */
 let map, layer;
 V.map = () => { if (mapDay == null) mapDay = curIdx(); return `<div class="mapwrap"><div id="leaflet" aria-label="מפת המסלול"></div>
-  <div class="map-top"><div class="pills">${META.map((d, k) => `<button class="pill ${k === mapDay ? 'on' : ''}" style="--c:${d.color}" data-act="mapDay" data-i="${k}">${d.short} ${d.num}</button>`).join('')}<button class="pill ${mapDay === 'tops' ? 'on' : ''}" style="--c:#13213D" data-act="mapDay" data-i="tops">המלצות</button></div></div>
+  <div class="map-top"><div class="pills">${META.map((d, k) => `<button class="pill ${k === mapDay ? 'on' : ''}" style="--c:${d.color}" data-act="mapDay" data-i="${k}">${d.short} ${d.num}</button>`).join('')}${[['food', 'טבעוני', '#1E9E8F'], ['bars', 'ברים', '#C2417F'], ['tops', 'המלצות', '#13213D'], ['saved', 'שמורים', '#D99400']].map(([k, t, c]) => `<button class="pill ${mapDay === k ? 'on' : ''}" style="--c:${c}" data-act="mapDay" data-i="${k}">${t}</button>`).join('')}</div></div>
   <button class="icon-btn" style="position:absolute;left:12px;bottom:${mapSel ? 200 : 16}px;z-index:500;width:48px;height:48px;border-radius:16px;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.2)" data-act="locate" aria-label="המיקום שלי">${ic('locate')}</button>
   ${mapSel ? mapCard() : ''}</div>`; };
 let mapDay = null, mapSel = null, meMarker = null;
-function mapStops() { if (mapDay === 'tops') return T.discover.tops.map((t, k) => ({ ...t, id: 't' + k, color: '#13213D' })); const d = mapDay ?? curIdx(); return S.days[d].stops.map((s) => ({ ...s, color: META[d].color })); }
+const LAYER = { food: '#1E9E8F', bars: '#C2417F', tops: '#13213D' };
+function mapStops() {
+  if (LAYER[mapDay]) return T.discover[mapDay].map((t, k) => ({ ...t, id: mapDay + k, color: LAYER[mapDay] }));
+  if (mapDay === 'saved') return S.saved.filter(hasGeo).map((x) => ({ ...x, name: x.title, note: 'מהשמורים', kind: 'star', id: 's' + x.id, color: '#D99400' }));
+  const d = mapDay ?? curIdx(); return S.days[d].stops.map((s) => ({ ...s, color: META[d].color }));
+}
+const isLayer = () => typeof mapDay === 'string';
 function mapCard() {
   const s = mapStops().find((x) => x.id === mapSel); if (!s) return '';
   return `<div class="map-card pop"><div class="row"><span class="tile" style="--c:${s.color}">${ic(s.kind)}</span><div class="grow"><div style="font-weight:800;font-size:18px">${esc(s.name)}</div><div class="muted">${esc(s.note || '')}</div></div><button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
@@ -237,11 +269,11 @@ function drawMarkers(fit) {
   const pts = mapStops().filter(hasGeo);
   const line = [];
   pts.forEach((s, k) => {
-    const icon = L.divIcon({ className: '', html: `<div class="mk" style="--c:${s.color};transform:rotate(${[-6, 5, -4, 6][k % 4]}deg)">${mapDay === 'tops' ? '★' : k + 1}</div>`, iconSize: [36, 36], iconAnchor: [18, 18] });
+    const icon = L.divIcon({ className: '', html: `<div class="mk" style="--c:${s.color};transform:rotate(${[-6, 5, -4, 6][k % 4]}deg)">${isLayer() ? ic(s.kind) : k + 1}</div>`, iconSize: [36, 36], iconAnchor: [18, 18] });
     L.marker([s.lat, s.lng], { icon, title: s.name }).addTo(layer).on('click', () => { mapSel = s.id; rerenderMapOverlay(); });
     line.push([s.lat, s.lng]);
   });
-  if (mapDay !== 'tops' && line.length > 1) L.polyline(line, { color: pts[0].color, weight: 4, dashArray: '2 10', lineCap: 'round' }).addTo(layer);
+  if (!isLayer() && line.length > 1) L.polyline(line, { color: pts[0].color, weight: 4, dashArray: '2 10', lineCap: 'round' }).addTo(layer);
   if (fit && line.length) map.fitBounds(line, { padding: [70, 70], maxZoom: 15 });
 }
 function rerenderMapOverlay() {
@@ -253,16 +285,21 @@ function rerenderMapOverlay() {
 
 /* discover */
 let discTab = 'food';
+let here = null;
 V.discover = () => {
   const tabs = [['food', 'טבעוני · GF', '#1E9E8F'], ['bars', 'ברים', '#C2417F'], ['tops', 'מומלצים', '#E8553D']];
   const c = tabs.find((t) => t[0] === discTab)[2];
-  return pageHead('גלה את העיר', 'נבחר בשבילך · יאומת לפני הטיסה') + `
+  const di = curIdx(); const dayGeo = S.days[di].stops.filter(hasGeo);
+  const center = here || (dayGeo.length ? { lat: dayGeo.reduce((t, x) => t + x.lat, 0) / dayGeo.length, lng: dayGeo.reduce((t, x) => t + x.lng, 0) / dayGeo.length } : null);
+  const list = T.discover[discTab].map((d, k) => ({ ...d, k, dist: center && hasGeo(d) ? km(center, d) : null })).sort((p, q) => (p.dist ?? 99) - (q.dist ?? 99));
+  return pageHead('גלה את העיר', 'נבדק ב־10.11 · לאמת שעות לפני שהולכים') + `
   <div class="section"><div class="pills">${tabs.map((t) => `<button class="pill ${t[0] === discTab ? 'on' : ''}" style="--c:${t[2]}" data-act="disc" data-t="${t[0]}">${t[1]}</button>`).join('')}</div>
-  ${T.discover[discTab].map((d, k) => `<div class="card row pop"><span class="tile ${ROT[k % 4]}" style="--c:${c}">${ic(d.kind)}</span>
-    <div class="grow"><div style="font-weight:800">${esc(d.name)}</div><div class="muted">${esc(d.note)}${d.area ? ' · ' + esc(d.area) : ''}</div>${d.verify ? '<span class="badge" style="color:#8A4B00">לבדיקה</span>' : ''}</div>
-    <a class="icon-btn" href="${gmSearch(d)}" target="_blank" rel="noopener" aria-label="פתח ב־Google Maps">${ic('pin')}</a>
-    <button class="icon-btn" style="background:#FFF4D6" data-act="discSave" data-k="${k}" aria-label="שמירה במועדפים">${ic('star')}</button>
-    <button class="icon-btn" data-act="discAdd" data-k="${k}" aria-label="הוסף ליום">${ic('plus')}</button></div>`).join('')}
+  <div class="row"><span class="muted grow">${here ? 'ממוין לפי המרחק ממך' : `ממוין לפי הקרבה למסלול של יום ${META[di].short}`}</span>${here ? '' : `<button class="btn soft sm" data-act="nearMe">${ic('locate')}קרוב אליי</button>`}</div>
+  ${list.map((d, n) => `<div class="card row pop" style="align-items:flex-start"><span class="tile ${ROT[n % 4]}" style="--c:${c}">${ic(d.kind)}</span>
+    <div class="grow"><div style="font-weight:800">${esc(d.name)}</div><div class="muted">${esc(d.note)}</div><div class="muted">${esc(d.area || '')}${d.dist != null ? ' · ' + fmtKm(d.dist) : ''}</div>${d.verify ? `<span class="badge" style="color:#8A4B00">${esc(typeof d.verify === 'string' ? d.verify : 'לבדיקה')}</span>` : ''}${d.src ? ` <a class="muted" href="${esc(d.src)}" target="_blank" rel="noopener">מקור</a>` : ''}</div>
+    <div style="display:flex;flex-direction:column;gap:6px"><a class="icon-btn" href="${hasGeo(d) ? gmDir(null, d, 'walking') : gmSearch(d)}" target="_blank" rel="noopener" aria-label="ניווט ב־Google Maps">${ic('pin')}</a>
+    <button class="icon-btn" style="background:#FFF4D6" data-act="discSave" data-k="${d.k}" aria-label="שמירה במועדפים">${ic('star')}</button>
+    <button class="icon-btn" data-act="discAdd" data-k="${d.k}" aria-label="הוסף ליום">${ic('plus')}</button></div></div>`).join('')}
   </div>`;
 };
 
@@ -307,9 +344,12 @@ V.place = (di, id) => {
   const w = s.wiki && wiki[s.wiki];
   if (s.wiki && !w) loadWiki(s.wiki).then(() => { if (location.hash.startsWith('#place/')) render(); });
   return pageHead(s.name, `יום ${m.short} ${m.num}.12 · ${s.note || ''}`, '#today') + `<div class="section">
-    ${cn ? `<div class="warn">${ic('warn')}<span>${cn}. <a href="#places">להעברה ליום אחר</a></span></div>` : ''}
+    ${cn ? (() => { const to = suggestDay(s, di); return `<div class="warn">${ic('warn')}<span class="grow">${cn}.${to != null ? `<br><button class="btn sun sm" style="margin-top:6px" data-act="moveTo" data-d="${di}" data-id="${s.id}" data-to="${to}">להעביר ליום ${META[to].short} ${META[to].num}.12</button>` : ''}</span></div>`; })() : ''}
+    ${infoNote(s, m.date) ? `<div class="warn" style="background:#EEF2FA;color:var(--navy)">${ic('warn')}<span>${infoNote(s, m.date)}.</span></div>` : ''}
+    ${hoursOf(s) ? `<div class="card row" style="padding:10px 12px"><span class="muted grow">שעות פתיחה</span><b style="font-size:13px">${esc(hoursOf(s))}</b></div>` : ''}
     ${w && w.img.length ? `<div class="gallery">${w.img.map((u) => `<img src="${esc(u)}" alt="" loading="lazy">`).join('')}</div>` : ''}
     ${storyHTML(s, w)}
+    ${hasGeo(s) && s.kind !== 'food' ? `<h2>טבעוני וללא גלוטן קרוב</h2>${nearest(T.discover.food, s, 3).map((f) => `<div class="card row"><span class="tile" style="--c:var(--teal)">${ic('food')}</span><div class="grow"><div style="font-weight:800">${esc(f.name)}</div><div class="muted">${fmtKm(f.dist)} · ${esc(f.note)}</div></div><a class="icon-btn" href="${gmDir(s, f, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('pin')}</a></div>`).join('')}` : ''}
     <span class="muted" style="font-weight:800">איך מגיעים? בחר ונפתח ב־Google Maps</span>
     <div class="row"><a class="btn sun grow" href="${gmDir(null, s, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft grow" href="${gmDir(null, s, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה ציבורית</a></div>
     <div class="row"><a class="btn soft sm grow" href="${gmSearch(s)}" target="_blank" rel="noopener">תמונות וביקורות ב־Google Maps</a><button class="btn soft sm" data-act="placeEditById" data-d="${di}" data-id="${s.id}">${ic('pen')}עריכה</button></div>
@@ -371,14 +411,14 @@ V.packing = () => pageHead('רשימת ציוד', packCount(), '#more') + `<div 
 
 /* static guides */
 const guide = (title, sub, cards) => pageHead(title, sub, '#more') + `<div class="section">${cards.map(([k, c, t, lines], i) => `<div class="card row" style="align-items:flex-start"><span class="tile ${ROT[i % 4]}" style="--c:${c}">${ic(k)}</span><div class="grow"><div style="font-weight:800;font-size:16px;margin-bottom:4px">${t}</div>${lines.map((l) => `<div style="font-size:14px;color:#3C4865;margin-bottom:3px">• ${l}</div>`).join('')}</div></div>`).join('')}</div>`;
-V.transport = () => guide('תחבורה', 'איך זזים בעיר · המחירים יאומתו מול TMB', [
-  ['plane', '#E8553D', 'מהשדה למלון', ['Aerobús עד Plaça Catalunya או Plaça d’Espanya, ומשם למלון', 'מטרו L9 Sud: בתחנות השדה צריך כרטיס שדה תעופה מיוחד', 'מונית: יש תור מסודר ביציאה מהטרמינל']],
-  ['metro', '#2453C9', 'כרטיס משתלם', ['T-casual: עשר נסיעות, מתאים לרוב הטיולים', 'Hola Barcelona: נסיעות ללא הגבלה לכמה ימים, כולל המטרו מהשדה', 'אפשר לקנות במכונות בכל תחנה, גם עם כרטיס אשראי']],
-  ['walk', '#1E9E8F', 'ברגל', ['רוב המסלול שלך במרחק הליכה', 'מעל 20 דקות הליכה האפליקציה תמליץ על מטרו']],
+V.transport = () => guide('תחבורה', 'מחירים לפי מקורות מ־2026 · לאמת בקופה', [
+  ['plane', '#E8553D', 'מהשדה למלון', ['Aerobús: אוטובוס ישיר למרכז, בערך €7.75 לכיוון. כרטיסי המטרו לא תקפים בו', 'מטרו L9 Sud: בתחנות השדה צריך כרטיס שדה תעופה, בערך €5.70–5.90. ה־T-casual לא תקף שם', 'מונית: יש תור מסודר ביציאה מהטרמינל']],
+  ['metro', '#2453C9', 'איזה כרטיס לקנות', ['T-casual: עשר נסיעות באזור 1 ב־€13. משתלם אם נוסעים פחות מ־4 פעמים ביום', 'Hola Barcelona: נסיעות ללא הגבלה, כולל המטרו לשדה. 48 שעות בערך €18.70, 72 שעות בערך €27.30', 'נסיעה בודדת: €2.90', 'קונים במכונות בכל תחנה, גם בכרטיס אשראי']],
+  ['walk', '#1E9E8F', 'ברגל', ['רוב המסלול שלך במרחק הליכה', 'מעל 20 דקות הליכה האפליקציה ממליצה על מטרו']],
   ['warn', '#D99400', 'שימו לב', ['כייסים ברמבלס ובמטרו: תיק קדימה, טלפון בכיס פנימי', 'בלילה עדיף מונית או אפליקציית מוניות']]
-]);
+]) + `<div class="section"><span class="muted">מקורות: <a href="https://static-web.tmb.cat/en/barcelona-fares-metro-bus" target="_blank" rel="noopener">TMB</a> · <a href="https://barcelonasecreta.com/en/prices-public-transport-fares-barcelona-2026/" target="_blank" rel="noopener">Barcelona Secreta</a> · <a href="https://aerobusbarcelona.es/en/faqs/" target="_blank" rel="noopener">Aerobús</a></span></div>`;
 V.shopping = () => pageHead('קניות', 'מבצעים והחזר מע״מ', '#more') + `<div class="section">
-  <div class="next" style="margin:0;background:var(--sun);color:var(--navy)"><div style="font-family:var(--display);font-size:32px;line-height:.9">החזר מע״מ = ההנחה הכי בטוחה</div><div style="font-size:14px">המע״מ על בגדים בספרד הוא 21%. בקשו בקופה טופס tax free, ואשרו אותו בשדה לפני הבידוק. אחרי עמלות חוזר בדרך כלל חלק משמעותי.</div></div>
+  <div class="next" style="margin:0;background:var(--sun);color:var(--navy)"><div style="font-family:var(--display);font-size:32px;line-height:.9">החזר מע״מ = ההנחה הכי בטוחה</div><div style="font-size:14px">המע״מ על בגדים בספרד הוא 21%, ולתיירים מחוץ לאיחוד אין סכום מינימום. בקשו בקופה טופס tax free (מראים דרכון), ובשדה, לפני הבידוק, מאשרים אותו במכונת DIVA. אחרי עמלות חוזרים בדרך כלל 13%–16% מהמחיר.</div></div>
   <div class="warn">${ic('warn')}<span>עונת המבצעים הגדולה (Rebajas) מתחילה בדרך כלל ב־7 בינואר, אחרי הטיול. בדצמבר יש בעיקר מבצעים נקודתיים.</span></div>
   <div class="grid2">${[['ZARA', 'https://www.zara.com/es/', '#13213D'], ['MANGO', 'https://shop.mango.com/es', '#E8553D'], ['UNIQLO', 'https://www.uniqlo.com/es/es/', '#E8553D'], ['Pull&Bear', 'https://www.pullandbear.com/es/', '#2453C9']].map(([n, u, c]) => `<a class="card" href="${u}" target="_blank" rel="noopener" style="text-decoration:none;display:flex;flex-direction:column;gap:6px"><b style="font-family:var(--display);font-size:30px;line-height:.9;color:${c}">${esc(n)}</b><span class="muted">לאתר הספרדי ←</span></a>`).join('')}</div>
   <span class="muted">ניטור אוטומטי של מבצעים יתווסף בהמשך, בניסיון.</span></div>`;
@@ -427,9 +467,10 @@ function placeSheet(di, si) {
     <div class="row"><button class="btn soft sm" data-act="plSearch">חפש מיקום במפה</button><span class="muted grow" id="pl-geo">${pick ? 'יש מיקום ✓' : 'בלי מיקום, הניווט יחפש לפי השם'}</span></div>
     <div id="pl-results" style="display:flex;flex-direction:column;gap:6px"></div>
     <label class="lab">הערה<input class="field" id="pl-note" value="${esc(s.note || '')}" placeholder="שעה, כרטיס, מה לא לפספס"></label>
+    <div class="lab">סוג המקום<div class="pills" id="pl-kinds" style="flex-wrap:wrap">${[['star','כללי'],['food','אוכל'],['bar','בר'],['gaudi','גאודי'],['view','תצפית'],['park','פארק'],['market','שוק'],['shop','קניות'],['show','מופע'],['walk','סיור'],['port','ים'],['hotel','מלון']].map(([k, t]) => `<button class="pill ${(s.kind || 'star') === k ? 'on' : ''}" style="--c:var(--navy)" data-act="plKind" data-k="${k}">${t}</button>`).join('')}</div></div>
     <div class="lab">באיזה יום?<div class="row" id="pl-days">${META.map((m, k) => `<button class="pill ${k === di ? 'on' : ''}" style="--c:${m.color};flex:1" data-act="plDay" data-i="${k}">${m.num}.12</button>`).join('')}</div></div>
     <div class="row"><button class="btn sun grow" data-act="plSave">שמירה</button><button class="btn soft" data-act="closeSheet">ביטול</button></div>`);
-  sheetCtx = { kind: 'place', di, si, get pick() { return pick; }, set pick(v) { pick = v; }, get day() { return day; }, set day(v) { day = v; } };
+  sheetCtx = { kind: 'place', kindSel: s.kind || 'star', di, si, get pick() { return pick; }, set pick(v) { pick = v; }, get day() { return day; }, set day(v) { day = v; } };
 }
 let sheetCtx = null;
 
@@ -452,8 +493,13 @@ const A = {
       <div class="row"><button class="btn sun grow" data-act="sortApply">להחליף לסדר הזה</button><button class="btn soft" data-act="closeSheet">להשאיר</button></div>`);
     sheetCtx = { kind: 'sort', i, ids: order.concat(rest).map((s) => s.id) };
   },
+  moveTo: (e) => {
+    const d = +e.dataset.d, to = +e.dataset.to; const k = S.days[d].stops.findIndex((x) => x.id === e.dataset.id); if (k < 0) return;
+    const [x] = S.days[d].stops.splice(k, 1); S.days[to].stops.push(x); save(); render(); toast(`"${x.name}" עבר ליום ${META[to].short}. אפשר לסדר את היום ב"סדר לי את היום"`);
+  },
+  nearMe: () => { if (!navigator.geolocation) { toast('אין גישה למיקום'); return; } navigator.geolocation.getCurrentPosition((p) => { here = { lat: p.coords.latitude, lng: p.coords.longitude }; render(); }, () => toast('לא קיבלתי הרשאה למיקום')); },
   sortApply: () => { const { i, ids } = sheetCtx; S.days[i].stops = ids.map((id) => S.days[i].stops.find((s) => s.id === id)); save(); closeSheet(); render(); toast('הסדר עודכן'); },
-  mapDay: (e) => { mapDay = e.dataset.i === 'tops' ? 'tops' : +e.dataset.i; mapSel = null; drawMarkers(true); rerenderMapOverlay(); },
+  mapDay: (e) => { mapDay = /^\d+$/.test(e.dataset.i) ? +e.dataset.i : e.dataset.i; mapSel = null; drawMarkers(true); rerenderMapOverlay(); },
   mapClose: () => { mapSel = null; rerenderMapOverlay(); },
   locate: () => {
     if (!navigator.geolocation) { toast('אין גישה למיקום'); return; }
@@ -475,6 +521,7 @@ const A = {
   placeEditById: (e) => { const di = +e.dataset.d; placeSheet(di, S.days[di].stops.findIndex((s) => s.id === e.dataset.id)); },
   placeDel: (e) => { const di = +e.dataset.d, si = +e.dataset.s; const [x] = S.days[di].stops.splice(si, 1); save(); render(); toast(`"${x.name}" נמחק`); },
   mv: (e) => { const di = +e.dataset.d, si = +e.dataset.s, j = si + +e.dataset.dir; const a = S.days[di].stops; if (j < 0 || j >= a.length) return; [a[si], a[j]] = [a[j], a[si]]; save(); render(); },
+  plKind: (e) => { sheetCtx.kindSel = e.dataset.k; document.querySelectorAll('#pl-kinds .pill').forEach((b) => b.classList.toggle('on', b.dataset.k === e.dataset.k)); },
   plDay: (e) => { sheetCtx.day = +e.dataset.i; document.querySelectorAll('#pl-days .pill').forEach((b, k) => b.classList.toggle('on', k === sheetCtx.day)); },
   plSearch: async () => {
     const name = $('#pl-name').value.trim(); if (!name) { toast('כתוב שם קודם'); return; }
@@ -491,7 +538,7 @@ const A = {
     const note = $('#pl-note').value.trim();
     let item;
     if (c.si != null) { item = S.days[c.di].stops.splice(c.si, 1)[0]; } else { item = { id: uid(), kind: 'star' }; }
-    Object.assign(item, { name, note }); if (c.pick) { item.lat = c.pick.lat; item.lng = c.pick.lng; }
+    Object.assign(item, { name, note, kind: c.kindSel || item.kind || 'star' }); if (c.pick) { item.lat = c.pick.lat; item.lng = c.pick.lng; }
     if (c.si != null && c.day === c.di) S.days[c.di].stops.splice(c.si, 0, item); else S.days[c.day].stops.push(item);
     save(); closeSheet(); render();
     toast(c.si == null ? `נוסף ליום ${META[c.day].short}` : c.day === c.di ? 'נשמר' : `הועבר ליום ${META[c.day].short}`);
