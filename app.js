@@ -224,9 +224,7 @@ function mountMap() {
   if (!window.L) { $('#leaflet').innerHTML = '<div class="section muted">המפה צריכה חיבור לאינטרנט.</div>'; return; }
   if (mapDay == null) mapDay = curIdx();
   map = L.map('leaflet', { zoomControl: false, attributionControl: true }).setView([41.39, 2.17], 13);
-  const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© OpenStreetMap © CARTO' }).addTo(map);
-  let swapped = false;
-  carto.on('tileerror', () => { if (swapped) return; swapped = true; carto.remove(); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
   setTimeout(() => map && map.invalidateSize(), 300);
   drawMarkers(true);
 }
