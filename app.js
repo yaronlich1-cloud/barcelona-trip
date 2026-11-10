@@ -109,7 +109,7 @@ async function loadRate() {
   try {
     const c = JSON.parse(localStorage.getItem('bcn.rate') || 'null');
     if (c && Date.now() - c.at < 12 * 3600e3) { rate = c; return; }
-    const r = await fetch('https://api.frankfurter.app/latest?from=EUR&to=ILS'); const j = await r.json();
+    const r = await fetch('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=ILS'); const j = await r.json();
     if (j.rates && j.rates.ILS) { rate = { v: j.rates.ILS, date: j.date, at: Date.now() }; localStorage.setItem('bcn.rate', JSON.stringify(rate)); render(); }
   } catch (e) { const c = JSON.parse(localStorage.getItem('bcn.rate') || 'null'); if (c) rate = c; }
 }
