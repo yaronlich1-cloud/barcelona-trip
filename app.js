@@ -74,7 +74,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '5 · 11.11';
+const VERSION = '6 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
