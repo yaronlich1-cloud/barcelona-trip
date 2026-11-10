@@ -69,6 +69,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
+const VERSION = '4 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -224,7 +225,10 @@ function mountMap() {
   if (!window.L) { $('#leaflet').innerHTML = '<div class="section muted">המפה צריכה חיבור לאינטרנט.</div>'; return; }
   if (mapDay == null) mapDay = curIdx();
   map = L.map('leaflet', { zoomControl: false, attributionControl: true }).setView([41.39, 2.17], 13);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  let tileErrs = 0, tileOk = 0;
+  const tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  tl.on('tileload', () => { tileOk++; const n = $('#map-msg'); if (n) n.remove(); });
+  tl.on('tileerror', () => { tileErrs++; if (tileErrs === 4 && !tileOk && !$('#map-msg')) { const d = document.createElement('div'); d.id = 'map-msg'; d.className = 'warn'; d.style.cssText = 'position:absolute;top:70px;right:12px;left:12px;z-index:600'; d.textContent = 'רקע המפה לא נטען. בדוק חיבור לאינטרנט. העצירות והניווט עובדים גם בלי הרקע.'; $('.mapwrap').appendChild(d); } });
   setTimeout(() => map && map.invalidateSize(), 300);
   drawMarkers(true);
 }
@@ -337,7 +341,7 @@ V.more = () => { const H = S.hotel || {}; return pageHead('עוד דברים', '
   <div class="grid2">
     ${[['#places', 'list', 'המקומות', 'עריכה והעברה בין ימים', '#2453C9'], ['#expenses', 'coin', 'הוצאות', `€${Math.round(spent())} מתוך €${S.budget}`, '#E8553D'], ['#packing', 'bag', 'ציוד', `${packCount()}`, '#1E9E8F'], ['#flights', 'plane', 'טיסות', S.flights.back.time ? `חזרה ${S.flights.back.time}` : 'הוסף פרטי טיסה', '#13213D'], ['#transport', 'metro', 'תחבורה', 'מהשדה, כרטיסים, מטרו', '#2453C9'], ['#phrases', 'chat', 'ספרדית', 'משפטים עם השמעה', '#C2417F'], ['#shopping', 'tag', 'קניות', 'מבצעים והחזר מע״מ', '#D99400'], ['#emergency', 'sos', 'חירום', '112 · ביטוח · בית מרקחת', '#E8553D']]
       .map(([h, k, t, s, c]) => `<a class="big" href="${h}" style="--c:${c}"><span class="ic">${ic(k)}</span><span style="display:flex;flex-direction:column"><b>${t}</b><span>${esc(s)}</span></span></a>`).join('')}
-  </div></div>`; };
+  </div><div class="muted" style="text-align:center;padding:8px 0">גרסה ${VERSION}</div></div>`; };
 
 /* expenses */
 const spent = () => S.expenses.reduce((a, e) => a + (e.cur === 'ILS' ? e.amount / (rate ? rate.v : 3.9) : e.amount), 0);
@@ -574,5 +578,5 @@ function addShared(text, title) {
 render();
 loadWeather();
 loadRate();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
 })();

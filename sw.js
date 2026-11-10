@@ -1,15 +1,15 @@
-// App shell is cached for offline use; live data (maps, weather, rates, Wikipedia) goes to the network.
-const CACHE = 'bcn-v2';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './data.js', './stories.js', './manifest.webmanifest', './icons/icon-192.png',
-  './vendor/leaflet/leaflet.css', './vendor/leaflet/leaflet.js'];
+// App shell is cached for offline use; live data (map tiles, weather, rates, Wikipedia) goes to the network.
+const CACHE = 'bcn-v4';
+const SHELL = ['./', './index.html', './styles.css?v=4', './app.js?v=4', './data.js?v=4', './stories.js?v=4', './manifest.webmanifest', './icons/icon-192.png', './vendor/leaflet/leaflet.css', './vendor/leaflet/leaflet.js'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
-  const u = new URL(e.request.url);
-  if (e.request.method !== 'GET') return;
-  const isShell = u.origin === location.origin || u.hostname === 'unpkg.com' || u.hostname.endsWith('gstatic.com') || u.hostname === 'fonts.googleapis.com';
-  if (!isShell) return; // network only for APIs and map tiles
-  // network first for our own files so updates arrive; fall back to cache offline
-  e.respondWith(fetch(e.request).then((r) => { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return r; })
-    .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('./index.html'))));
+  const req = e.request; if (req.method !== 'GET') return;
+  const u = new URL(req.url);
+  const shell = u.origin === location.origin || u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com';
+  if (!shell) return; // maps, weather, rates and Wikipedia always go straight to the network
+  // Network first, bypassing the HTTP cache, so a new version shows up right away; cache is the offline fallback.
+  const net = req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(req, { cache: 'no-cache' });
+  e.respondWith(net.then((r) => { if (r.ok) { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); } return r; })
+    .catch(() => caches.match(req, { ignoreSearch: req.mode === 'navigate' }).then((r) => r || caches.match('./index.html'))));
 });
