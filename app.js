@@ -62,6 +62,11 @@ function fresh() {
 }
 let S;
 try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fresh(); }
+(function migrate() {
+  const byName = {}; T.days.forEach((d) => d.stops.forEach((s) => { byName[s.name] = s; }));
+  S.days.forEach((d) => d.stops.forEach((s) => { const src = byName[s.name]; if (src) ['story', 'wiki', 'rule'].forEach((k) => { if (src[k] && !s[k]) s[k] = src[k]; }); }));
+  if (!S.hotel) S.hotel = { name: '', address: '', lat: null, lng: null };
+})();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
 
@@ -219,7 +224,10 @@ function mountMap() {
   if (!window.L) { $('#leaflet').innerHTML = '<div class="section muted">המפה צריכה חיבור לאינטרנט.</div>'; return; }
   if (mapDay == null) mapDay = curIdx();
   map = L.map('leaflet', { zoomControl: false, attributionControl: true }).setView([41.39, 2.17], 13);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© OpenStreetMap © CARTO' }).addTo(map);
+  const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© OpenStreetMap © CARTO' }).addTo(map);
+  let swapped = false;
+  carto.on('tileerror', () => { if (swapped) return; swapped = true; carto.remove(); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); });
+  setTimeout(() => map && map.invalidateSize(), 300);
   drawMarkers(true);
 }
 function drawMarkers(fit) {
@@ -299,15 +307,29 @@ V.place = (di, id) => {
   return pageHead(s.name, `יום ${m.short} ${m.num}.12 · ${s.note || ''}`, '#today') + `<div class="section">
     ${cn ? `<div class="warn">${ic('warn')}<span>${cn}. <a href="#places">להעברה ליום אחר</a></span></div>` : ''}
     ${w && w.img.length ? `<div class="gallery">${w.img.map((u) => `<img src="${esc(u)}" alt="" loading="lazy">`).join('')}</div>` : ''}
-    <div class="card story">
-      <div class="row" style="margin-bottom:8px"><h2 class="grow">הסיפור</h2>${w && w.text ? `<button class="btn soft sm" data-act="speak" data-lang="${w.lang === 'he' ? 'he-IL' : 'en-US'}">${ic('speaker')}הקרא לי</button>` : ''}</div>
-      ${s.wiki ? (w ? (w.text ? `<p id="story-text">${esc(w.text)}</p><a class="muted" href="${esc(w.url)}" target="_blank" rel="noopener">המשך בוויקיפדיה${w.lang === 'en' ? ' (באנגלית)' : ''}</a>` : '<p class="muted">לא מצאתי ערך בוויקיפדיה.</p>') : '<p class="muted">טוען מוויקיפדיה…</p>') : '<p class="muted">סיפור מורחב על המקום יתווסף בהמשך.</p>'}
-    </div>
+    ${storyHTML(s, w)}
     <span class="muted" style="font-weight:800">איך מגיעים? בחר ונפתח ב־Google Maps</span>
     <div class="row"><a class="btn sun grow" href="${gmDir(null, s, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft grow" href="${gmDir(null, s, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה ציבורית</a></div>
     <div class="row"><a class="btn soft sm grow" href="${gmSearch(s)}" target="_blank" rel="noopener">תמונות וביקורות ב־Google Maps</a><button class="btn soft sm" data-act="placeEditById" data-d="${di}" data-id="${s.id}">${ic('pen')}עריכה</button></div>
   </div>`;
 };
+
+function storyHTML(s, w) {
+  const st = s.story && window.STORIES && window.STORIES[s.story];
+  const wikiPart = s.wiki ? (w ? (w.text ? `<p>${esc(w.text)}</p><a class="muted" href="${esc(w.url)}" target="_blank" rel="noopener">הערך המלא בוויקיפדיה${w.lang === 'en' ? ' (באנגלית)' : ''} ←</a>` : '') : '<p class="muted">טוען מוויקיפדיה…</p>') : '';
+  if (!st) return `<div class="card story"><h2 style="margin-bottom:8px">הסיפור</h2>${wikiPart || '<p class="muted">עוד אין סיפור למקום הזה.</p>'}</div>`;
+  return `<div class="card story" id="story-text">
+    <div class="row" style="margin-bottom:8px"><h2 class="grow">הסיפור</h2><button class="btn soft sm" data-act="speak" data-lang="he-IL">${ic('speaker')}הקרא לי</button></div>
+    <p>${esc(st.intro)}</p>
+    <h2 style="margin:6px 0 8px">ציר זמן</h2>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">${st.timeline.map(([when, what]) => `<div class="row" style="align-items:flex-start"><span class="badge" style="color:var(--day);flex:none;min-width:64px;text-align:center">${esc(when)}</span><span style="font-size:14px;line-height:1.5">${esc(what)}</span></div>`).join('')}</div>
+    <h2 style="margin-bottom:6px">מה לחפש כשאתה שם</h2>
+    ${st.look.map((l) => `<p style="margin:0 0 6px">• ${esc(l)}</p>`).join('')}
+    <div class="warn" style="display:block;background:#EEF2FA;color:var(--navy);margin:10px 0"><b>הידעת?</b> ${esc(st.fact)}</div>
+    <div class="warn" style="display:block;margin-bottom:10px"><b>טיפ:</b> ${esc(st.tip)}</div>
+  </div>
+  ${wikiPart ? `<div class="card story"><h2 style="margin-bottom:8px">מוויקיפדיה</h2>${wikiPart}</div>` : ''}`;
+}
 
 /* more */
 V.more = () => { const H = S.hotel || {}; return pageHead('עוד דברים', 'כל הכלים לטיול') + `<div class="section">
@@ -472,7 +494,7 @@ const A = {
     save(); closeSheet(); render();
     toast(c.si == null ? `נוסף ליום ${META[c.day].short}` : c.day === c.di ? 'נשמר' : `הועבר ליום ${META[c.day].short}`);
   },
-  speak: (e) => { const t = $('#story-text'); if (!t || !('speechSynthesis' in window)) { toast('אין הקראה במכשיר הזה'); return; } speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t.textContent); u.lang = e.dataset.lang; speechSynthesis.speak(u); },
+  speak: (e) => { if (!('speechSynthesis' in window)) { toast('אין הקראה במכשיר הזה'); return; } if (speechSynthesis.speaking) { speechSynthesis.cancel(); return; } const t = $('#story-text'); if (!t) return; const u = new SpeechSynthesisUtterance(t.innerText.replace('הקרא לי', '')); u.lang = e.dataset.lang; u.rate = 0.95; speechSynthesis.speak(u); toast('לחץ שוב כדי לעצור'); },
   say: (e) => { if (!('speechSynthesis' in window)) { toast('אין השמעה במכשיר הזה'); return; } speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(e.dataset.t); u.lang = 'es-ES'; u.rate = 0.85; speechSynthesis.speak(u); },
   driver: () => { const H = S.hotel || {}; if (!H.name) { A.hotelEdit(); return; } sheet(`<h3>לנהג המונית</h3><div style="font-size:15px">Por favor, lléveme a:</div><div style="font-size:30px;font-weight:800;line-height:1.25" dir="ltr">${esc(H.name)}<br>${esc(H.address || '')}</div><button class="btn soft" data-act="closeSheet">סגירה</button>`); },
   hotelEdit: () => {
