@@ -514,7 +514,7 @@ const A = {
   savedDel: (e) => { S.saved.splice(+e.dataset.i, 1); save(); render(); toast('נמחק'); },
   savedToDay: (e) => {
     const i = +e.dataset.i; const x = S.saved[i];
-    daySheet((di) => { S.days[di].stops.push({ id: uid(), kind: 'star', name: x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat, lng: x.lng, url: x.url }); x.day = META[di].short; save(); render(); toast(`נוסף ליום ${META[di].short}. אפשר לעדכן שם ומיקום בעריכה`); });
+    daySheet((di) => { S.days[di].stops.push({ id: uid(), kind: 'star', name: x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat, lng: x.lng, url: x.url }); x.day = META[di].short; save(); render(); if (!hasGeo(x)) { placeSheet(di, S.days[di].stops.length - 1); toast('נוסף. עכשיו בחר את המיקום במפה'); } else toast(`נוסף ליום ${META[di].short}`); });
   },
   placeAdd: (e) => placeSheet(+e.dataset.d, null),
   placeEdit: (e) => placeSheet(+e.dataset.d, +e.dataset.s),
