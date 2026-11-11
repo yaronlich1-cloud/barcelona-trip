@@ -76,7 +76,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '12 · 11.11';
+const VERSION = '13 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -167,7 +167,7 @@ function articleFor(s) {
 const enriching = new Set(); const retried = new Set();
 async function enrichStop(stop, force) {
   if (!window.Enrich || enriching.has(stop.id) || stop.hotelRef) return;
-  if (!force && stop.details && Date.now() - stop.details.at < (stop.details.partial ? 3600e3 : 7 * 864e5)) return;
+  if (!force && stop.details && stop.details.photos && Date.now() - stop.details.at < (stop.details.partial ? 3600e3 : 7 * 864e5)) return;
   if (!hasGeo(stop) && !stop.osm) {
     // No location picked: find it by name, inside the Barcelona area
     try {
@@ -184,12 +184,15 @@ async function enrichStop(stop, force) {
     if ((!stop.kind || stop.kind === 'star') && d.kind) stop.kind = d.kind;
     save();
     const h = location.hash;
-    if (h.startsWith('#place/') || h === '#today' || h === '' || h === '#places') render(); else if (h === '#map') drawMarkers(false);
+    syncLinked(stop);
+    if (h.startsWith('#place/') || h === '#today' || h === '' || h === '#places' || h === '#saved') render(); else if (h === '#map') drawMarkers(false);
   } catch (e) { /* offline or rate limited: try again later */ } finally { enriching.delete(stop.id); }
 }
 function enrichAllSlowly() {
   if (!navigator.onLine) return;
-  const todo = []; S.days.forEach((d) => d.stops.forEach((s) => { if (!s.hotelRef && (!s.details || Date.now() - s.details.at > (s.details.partial ? 3600e3 : 7 * 864e5))) todo.push(s); }));
+  const stale = (s) => !s.hotelRef && (!s.details || !s.details.photos || Date.now() - s.details.at > (s.details.partial ? 3600e3 : 7 * 864e5));
+  const todo = []; S.days.forEach((d) => d.stops.forEach((s) => { if (stale(s)) todo.push(s); }));
+  S.saved.forEach((x) => { if (hasGeo(x) && stale(x)) todo.push(x); });
   let k = 0; const step = () => { if (k >= todo.length) return; enrichStop(todo[k++]).finally(() => setTimeout(step, 1500)); }; step();
 }
 async function searchPlaces(text) {
@@ -288,7 +291,7 @@ let mapDay = null, mapSel = null, meMarker = null;
 const LAYER = { food: '#1E9E8F', bars: '#C2417F', tops: '#13213D' };
 function mapStops() {
   if (LAYER[mapDay]) return T.discover[mapDay].map((t, k) => ({ ...t, id: mapDay + k, color: LAYER[mapDay] }));
-  if (mapDay === 'saved') return S.saved.map((x) => { const l = linkedStop(x); return { ...x, lat: x.lat ?? (l && l.st.lat), lng: x.lng ?? (l && l.st.lng), name: x.title, note: 'מהשמורים', kind: 'star', id: 's' + x.id, color: '#D99400' }; }).filter(hasGeo);
+  if (mapDay === 'saved') return S.saved.map((x) => { const l = linkedStop(x); return { ...x, lat: x.lat ?? (l && l.st.lat), lng: x.lng ?? (l && l.st.lng), name: x.name || x.title, note: l ? 'מהשמורים · ביום ' + META[l.di].short : 'מהשמורים', kind: x.kind || 'star', id: 's' + x.id, color: '#D99400' }; }).filter(hasGeo);
   const d = mapDay ?? curIdx(); return S.days[d].stops.map((s) => ({ ...s, color: META[d].color }));
 }
 const isLayer = () => typeof mapDay === 'string';
@@ -297,7 +300,7 @@ function mapCard() {
   return `<div class="map-card pop"><div class="row"><span class="tile" style="--c:${s.color}">${ic(s.kind)}</span><div class="grow"><div style="font-weight:800;font-size:18px">${esc(s.name)}</div><div class="muted">${esc(s.note || '')}</div></div><button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
   <span class="muted" style="font-weight:800">איך מגיעים? בחר ונפתח ב־Google Maps</span>
   <div class="row"><a class="btn sun grow" href="${gmDir(null, s, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft grow" href="${gmDir(null, s, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה ציבורית</a></div>
-  ${typeof mapDay === 'number' ? `<a class="btn soft sm" href="#place/${mapDay}/${s.id}">על המקום</a>` : ''}</div>`;
+  ${typeof mapDay === 'number' ? `<a class="btn soft sm" href="#place/${mapDay}/${s.id}">על המקום · תמונות</a>` : mapDay === 'saved' ? `<a class="btn soft sm" href="#place/s/${s.id.slice(1)}">על המקום · תמונות</a>` : ''}</div>`;
 }
 function mountMap() {
   if (!window.L) { $('#leaflet').innerHTML = '<div class="section muted">המפה צריכה חיבור לאינטרנט.</div>'; return; }
@@ -350,10 +353,92 @@ V.discover = () => {
 };
 
 /* saved */
-function linkedStop(x) { if (!x.url) return null; for (let k = 0; k < S.days.length; k++) { const st = S.days[k].stops.find((s) => s.url === x.url); if (st) return { di: k, st }; } return null; }
+function linkedStop(x) { for (let k = 0; k < S.days.length; k++) { const st = S.days[k].stops.find((s) => (s.savedId && s.savedId === x.id) || (x.url && s.url === x.url)); if (st) return { di: k, st }; } return null; }
+const savedOf = (st) => S.saved.find((x) => (st.savedId && x.id === st.savedId) || (st.url && x.url === st.url));
+// A saved link and the day stop made from it share one place: what one learns, the other gets.
+function syncLinked(o) {
+  const pair = S.days.some((d) => d.stops.includes(o)) ? savedOf(o) : (linkedStop(o) || {}).st;
+  if (!pair) return;
+  ['lat', 'lng', 'osm', 'details'].forEach((k) => { if (o[k] != null && pair[k] == null) pair[k] = o[k]; });
+  if (o.details && (!pair.details || pair.details.at < o.details.at)) pair.details = o.details;
+  if ((!pair.kind || pair.kind === 'star') && o.kind && o.kind !== 'star') pair.kind = o.kind;
+  save();
+}
+const inCity = (x) => x.lat > 41.2 && x.lat < 41.6 && x.lng > 1.9 && x.lng < 2.4;
+const GENERIC = ['פוסט מאינסטגרם', 'סרטון מטיקטוק', 'מקום מ־Google Maps', 'קישור חדש', 'מקום מהשמורים'];
+function knownPlaces() {
+  return [...S.days.flatMap((d) => d.stops).filter((s) => !s.hotelRef), ...T.discover.food, ...T.discover.bars, ...T.discover.tops].filter(hasGeo);
+}
+function matchKnown(text) {
+  const n = normName(text); if (n.length < 3) return null; let best = null;
+  knownPlaces().forEach((p) => { const pn = normName(String(p.name).split(/[(·,–]/)[0]); if (pn.length >= 4 && n.includes(pn) && (!best || pn.length > best.len)) best = { p, len: pn.length }; });
+  return best && best.p;
+}
+function parseMapsUrl(u) {
+  const out = {}; let m;
+  if ((m = u.match(/\/place\/([^/@?]+)/))) out.name = decodeURIComponent(m[1].replace(/\+/g, ' '));
+  if ((m = u.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/)) || (m = u.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/))) { out.lat = +m[1]; out.lng = +m[2]; }
+  if ((m = u.match(/[?&](?:q|query|destination)=([^&]+)/))) {
+    const v = decodeURIComponent(m[1].replace(/\+/g, ' ')); const c = v.match(/^(-?\d+\.\d+),\s*(-?\d+\.\d+)$/);
+    if (c) { out.lat = +c[1]; out.lng = +c[2]; } else if (!out.name) out.name = v;
+  }
+  return out;
+}
+// Phrases in a caption that may name the place: "📍 Name" first, then the first lines, then hashtags.
+function placePhrases(text) {
+  const t = String(text || '').replace(/https?:\/\/\S+/g, ' ');
+  const c = [];
+  (t.match(/📍[^\n#@|•]+/gu) || []).forEach((x) => c.push(x.replace('📍', '')));
+  t.split(/\n+/).map((l) => l.replace(/#\S+/g, '').replace(/@\S+/g, '').replace(/\p{Extended_Pictographic}/gu, '')).filter((l) => l.trim().length > 2 && l.length < 70).slice(0, 2).forEach((l) => c.push(l));
+  (t.match(/#[\p{L}\d_]{4,}/gu) || []).slice(0, 3).forEach((h) => c.push(h.slice(1).replace(/([a-z])([A-Z])/g, '$1 $2')));
+  return [...new Set(c.map((x) => x.replace(/\s+/g, ' ').replace(/^[\s\-–:|]+|[\s\-–:|]+$/g, '').trim()).filter((x) => x.length > 2 && !/^(barcelona|barcelone|bcn|spain|espana|travel)$/i.test(x)))].slice(0, 5);
+}
+async function findPlaceIn(text) {
+  const kn = matchKnown(text); if (kn) return [{ name: kn.name, lat: kn.lat, lng: kn.lng, kind: kn.kind, osm: kn.osm || null, sub: 'מהרשימות של האפליקציה' }];
+  const found = [];
+  for (const ph of placePhrases(text)) {
+    try { (await searchPlaces(ph)).filter(inCity).forEach((r) => { if (!found.some((f) => f.name === r.name && f.sub === r.sub)) found.push(r); }); } catch (e) { break; }
+    if (found.length >= 3) break;
+  }
+  return found;
+}
+function applyPlace(x, r) {
+  x.title = r.name;
+  x.name = r.name; x.lat = r.lat; x.lng = r.lng; x.osm = r.osm || null; if (r.kind) x.kind = r.kind; x.addr = r.sub || '';
+  x.status = 'found'; delete x.details; save();
+  const l = linkedStop(x); if (l && !hasGeo(l.st)) { Object.assign(l.st, { lat: r.lat, lng: r.lng, osm: r.osm || null }); if (GENERIC.includes(l.st.name)) l.st.name = r.name; delete l.st.details; enrichStop(l.st, true); }
+  enrichStop(x, true);
+}
+// Automatic: read what the link and the shared text tell us, and find the place.
+async function identify(x, text) {
+  x.status = 'searching'; save(); if (location.hash === '#saved') render();
+  let caption = text || ''; const k = srcKind(x.url || '');
+  if (k === 'pin') { const p = parseMapsUrl(x.url); if (p.lat != null) { applyPlace(x, { name: p.name || placePhrases(caption)[0] || x.title, lat: p.lat, lng: p.lng }); return; } if (p.name) caption = p.name + '\n' + caption; }
+  if (k === 'ig') { const m = (x.url || '').match(/\/explore\/locations\/\d+\/([^/?]+)/); if (m) caption = decodeURIComponent(m[1]).replace(/-/g, ' ') + '\n' + caption; }
+  if (k === 'tt') {
+    try { const r = await fetch('https://www.tiktok.com/oembed?url=' + encodeURIComponent(x.url)); const j = await r.json(); if (j.title) { caption += '\n' + j.title; x.caption = j.title; } if (j.thumbnail_url) x.thumb = j.thumbnail_url; } catch (e) { /* TikTok did not answer */ }
+  }
+  if (!x.caption && caption.replace(/https?:\/\/\S+/g, '').trim()) x.caption = caption.replace(/https?:\/\/\S+/g, '').trim().slice(0, 400);
+  let res = [];
+  try { res = await findPlaceIn(caption); } catch (e) { /* offline */ }
+  if (res[0]) { applyPlace(x, res[0]); if (location.hash === '#saved') render(); toast('זיהיתי: ' + res[0].name); return; }
+  x.status = 'unknown'; save(); if (location.hash === '#saved') render();
+  identifySheet(x);
+}
+function identifySheet(x) {
+  sheet(`<h3>איזה מקום זה?</h3>
+    <span class="muted">${srcKind(x.url || '') === 'ig' ? 'אינסטגרם לא מאפשר לאפליקציות לקרוא פוסטים. ' : ''}כתוב את שם המקום, או הדבק את הכיתוב של הפוסט, ואמצא אותו לבד.</span>
+    <textarea class="field" id="id-text" rows="3" placeholder="למשל: Flax & Kale, או כל הכיתוב מהפוסט">${esc(x.caption || '')}</textarea>
+    <button class="btn sun" data-act="idFind" data-id="${x.id}">מצא את המקום</button>
+    <div id="id-results" style="display:flex;flex-direction:column;gap:6px"></div>
+    <button class="btn soft" data-act="closeSheet">אחר כך</button>`);
+  sheetCtx = { kind: 'identify', id: x.id };
+}
 let savedTab = 'inbox';
 const srcKind = (u) => /instagram\.com/.test(u) ? 'ig' : /tiktok\.com/.test(u) ? 'tt' : /(maps\.app\.goo\.gl|google\.[a-z.]+\/maps|goo\.gl\/maps)/.test(u) ? 'pin' : 'link';
 const SRC = { ig: ['אינסטגרם', '#C2417F'], tt: ['טיקטוק', '#13213D'], pin: ['Google Maps', '#1E9E8F'], link: ['קישור', '#2453C9'] };
+const photosOf = (s, w) => [...new Set([...(w && w.images ? w.images : []), ...((s.details && s.details.photos) || [])])];
+const thumbOf = (x) => ((x.details && x.details.photos) || [])[0] || x.thumb || null;
 V.saved = () => {
   const list = S.saved.map((x, i) => ({ x, i })).filter((o) => savedTab === 'fav' ? o.x.fav : !o.x.fav);
   return pageHead('שמורים', 'קישורים, סרטונים ומקומות שאהבת') + `
@@ -364,9 +449,11 @@ V.saved = () => {
       <span class="muted">או ישר מהאפליקציה: "שיתוף" ← "ברצלונה"</span>
     </div>
     <div class="seg"><button class="${savedTab === 'inbox' ? 'on' : ''}" data-act="savedTab" data-t="inbox">נכנסו · ${S.saved.filter((x) => !x.fav).length}</button><button class="${savedTab === 'fav' ? 'on' : ''}" data-act="savedTab" data-t="fav">★ מועדפים · ${S.saved.filter((x) => x.fav).length}</button></div>
-    ${list.length ? list.map(({ x, i }) => { const k = srcKind(x.url || ''); const m = SRC[k]; return `<div class="card pop" style="display:flex;flex-direction:column;gap:10px">
-      <div class="row"><span class="tile ${ROT[i % 4]}" style="--c:${m[1]}">${ic(k)}</span><div class="grow"><div style="font-size:11px;font-weight:800;color:${m[1]}">${m[0]}${linkedStop(x) ? ' · נוסף ליום ' + META[linkedStop(x).di].short : ''}</div><div style="font-weight:800;font-size:16px">${esc(x.title || 'בלי שם')}</div>${x.url ? `<div class="muted" dir="ltr" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.url)}</div>` : ''}</div>
+    ${list.length ? list.map(({ x, i }) => { const k = srcKind(x.url || ''); const m = SRC[k]; const th = thumbOf(x); const l = linkedStop(x); return `<div class="card pop" style="display:flex;flex-direction:column;gap:10px">
+      <div class="row">${th ? `<img class="thumb" src="${esc(th)}" alt="" loading="lazy">` : `<span class="tile ${ROT[i % 4]}" style="--c:${m[1]}">${ic(k)}</span>`}<div class="grow" style="min-width:0"><div style="font-size:11px;font-weight:800;color:${m[1]}">${m[0]}${l ? ' · ביום ' + META[l.di].short : ''}</div><div style="font-weight:800;font-size:16px">${esc(x.title || 'בלי שם')}</div>
+      ${x.status === 'searching' ? '<div class="muted">מזהה את המקום…</div>' : hasGeo(x) ? `<div class="muted" style="color:var(--teal);font-weight:700">📍 ${esc(x.name || x.title)}${x.addr ? ' · ' + esc(x.addr) : ''}</div>` : `<button class="hours-tag" style="border:0;cursor:pointer" data-act="savedIdentify" data-id="${x.id}">לא זוהה מקום · לחץ כדי לבחור</button>`}</div>
       <button class="icon-btn danger" data-act="savedDel" data-i="${i}" aria-label="מחיקה">${ic('trash')}</button></div>
+      ${hasGeo(x) ? `<div class="row"><a class="btn soft sm grow" href="#place/s/${x.id}">על המקום · תמונות</a><a class="btn soft sm" href="${gmDir(null, x, 'walking')}" target="_blank" rel="noopener">${ic('pin')}נווט</a></div>` : ''}
       <div class="row"><button class="btn sun sm grow" data-act="savedToDay" data-i="${i}">${linkedStop(x) ? 'ביום ' + META[linkedStop(x).di].short + ' ✓' : 'הוסף ליום…'}</button><button class="btn soft sm grow" style="background:${x.fav ? '#FFE7A3' : '#FFF4D6'}" data-act="savedFav" data-i="${i}">${ic('star')}${x.fav ? 'במועדפים' : 'למועדפים'}</button>${x.url ? `<a class="icon-btn" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="פתיחת הקישור">${ic('link')}</a>` : ''}</div></div>`; }).join('') : `<div class="muted" style="text-align:center;padding:24px 0">${savedTab === 'fav' ? 'עוד אין מועדפים. לחץ ★ על קישור או מקום.' : 'אין כאן כלום עדיין. הדבק קישור למעלה או שתף מאינסטגרם.'}</div>`}
   </div>`;
 };
@@ -384,22 +471,31 @@ V.places = () => pageHead('כל המקומות', 'עריכה · מחיקה · ה
 
 /* place page */
 V.place = (di, id) => {
-  di = +di; const m = META[di]; const s = S.days[di] && S.days[di].stops.find((x) => x.id === id);
-  if (!s) return pageHead('לא נמצא', '', '#today');
-  setDayColor(di);
-  const cn = closedNote(s, m.date);
+  const fromSaved = di === 's';
+  const s = fromSaved ? S.saved.find((x) => x.id === id) : S.days[+di] && S.days[+di].stops.find((x) => x.id === id);
+  if (!s) return pageHead('לא נמצא', '', fromSaved ? '#saved' : '#today');
+  if (fromSaved && !s.name) s.name = s.title;
+  di = fromSaved ? null : +di; const m = fromSaved ? null : META[di];
+  if (!fromSaved) setDayColor(di);
+  const cn = m ? closedNote(s, m.date) : '';
   const w = articleFor(s);
-  if (!s.hotelRef && (!s.details || (s.details.partial && !retried.has(s.id)))) { retried.add(s.id); enrichStop(s, true); }
-  return pageHead(s.name, `יום ${m.short} ${m.num}.12 · ${s.note || ''}`, '#today') + `<div class="section">
+  if (!s.hotelRef && hasGeo(s) && (!s.details || !s.details.photos || (s.details.partial && !retried.has(s.id)))) { retried.add(s.id); enrichStop(s, true); }
+  else if (!s.hotelRef && !s.details && !retried.has(s.id)) { retried.add(s.id); enrichStop(s, true); }
+  const link = fromSaved ? linkedStop(s) : null; const src = fromSaved ? s : savedOf(s);
+  const imgs = photosOf(s, w); galleryImgs = imgs;
+  return pageHead(s.name || s.title, fromSaved ? `מהשמורים · ${SRC[srcKind(s.url || '')][0]}${link ? ' · ביום ' + META[link.di].short : ''}` : `יום ${m.short} ${m.num}.12 · ${s.note || ''}`, fromSaved ? '#saved' : '#today') + `<div class="section">
     ${cn ? (() => { const to = suggestDay(s, di); return `<div class="warn">${ic('warn')}<span class="grow">${cn}.${to != null ? `<br><button class="btn sun sm" style="margin-top:6px" data-act="moveTo" data-d="${di}" data-id="${s.id}" data-to="${to}">להעביר ליום ${META[to].short} ${META[to].num}.12</button>` : ''}</span></div>`; })() : ''}
-    ${infoNote(s, m.date) ? `<div class="warn" style="background:#EEF2FA;color:var(--navy)">${ic('warn')}<span>${infoNote(s, m.date)}.</span></div>` : ''}
-    ${w && w.images && w.images.length ? `<div class="gallery">${w.images.map((u) => `<img src="${esc(u)}" alt="" loading="lazy">`).join('')}</div>` : ''}
+    ${m && infoNote(s, m.date) ? `<div class="warn" style="background:#EEF2FA;color:var(--navy)">${ic('warn')}<span>${infoNote(s, m.date)}.</span></div>` : ''}
+    ${fromSaved ? (link ? `<a class="btn navy sm" href="#place/${link.di}/${link.st.id}">${ic('check')}כבר במסלול של יום ${META[link.di].short} · לעמוד במסלול</a>` : `<button class="btn sun" data-act="savedToDayById" data-id="${s.id}">${ic('plus')}הוסף למסלול של יום…</button>`) : ''}
+    ${imgs.length ? `<div class="gallery">${imgs.map((u, k) => `<img src="${esc(u)}" alt="תמונה ${k + 1} של ${esc(s.name || '')}" loading="lazy" data-act="lightbox" data-i="${k}">`).join('')}</div><span class="muted" style="margin-top:-6px">לחץ על תמונה להגדלה</span>` : (enriching.has(s.id) ? '<span class="muted">מחפש תמונות…</span>' : '')}
+    ${src && src.url ? `<a class="btn soft sm" href="${esc(src.url)}" target="_blank" rel="noopener">${ic(srcKind(src.url))}הפוסט המקורי (${SRC[srcKind(src.url)][0]})</a>` : ''}
+    ${src && src.caption ? `<div class="card muted" style="white-space:pre-line;font-size:13px">${esc(cut(src.caption, 300))}</div>` : ''}
     ${infoCard(s)}
     ${storyHTML(s, w)}
     ${hasGeo(s) && s.kind !== 'food' ? `<h2>טבעוני וללא גלוטן קרוב</h2>${nearest(T.discover.food, s, 3).map((f) => `<div class="card row"><span class="tile" style="--c:var(--teal)">${ic('food')}</span><div class="grow"><div style="font-weight:800">${esc(f.name)}</div><div class="muted">${fmtKm(f.dist)} · ${esc(f.note)}</div></div><a class="icon-btn" href="${gmDir(s, f, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('pin')}</a></div>`).join('')}` : ''}
     <span class="muted" style="font-weight:800">איך מגיעים? בחר ונפתח ב־Google Maps</span>
     <div class="row"><a class="btn sun grow" href="${gmDir(null, s, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft grow" href="${gmDir(null, s, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה ציבורית</a></div>
-    <div class="row"><a class="btn soft sm grow" href="${gmSearch(s)}" target="_blank" rel="noopener">תמונות וביקורות ב־Google Maps</a><button class="btn soft sm" data-act="placeEditById" data-d="${di}" data-id="${s.id}">${ic('pen')}עריכה</button></div>
+    <div class="row"><a class="btn soft sm grow" href="${gmSearch(s)}" target="_blank" rel="noopener">תמונות וביקורות ב־Google Maps</a>${fromSaved ? `<button class="btn soft sm" data-act="savedIdentify" data-id="${s.id}">${ic('pen')}מקום אחר</button>` : `<button class="btn soft sm" data-act="placeEditById" data-d="${di}" data-id="${s.id}">${ic('pen')}עריכה</button>`}</div>
   </div>`;
 };
 
@@ -438,7 +534,7 @@ function storyHTML(s, w) {
   if (!st) {
     if (wikiCard) return wikiCard;
     if (enriching.has(s.id) || w === 'loading') return '<div class="card story"><h2 style="margin-bottom:8px">על המקום</h2><p class="muted">מחפש מידע על המקום… זה לוקח כמה שניות.</p></div>';
-    return `<div class="card story"><h2 style="margin-bottom:8px">על המקום</h2><p class="muted">${hasGeo(s) ? 'לא מצאתי ערך בוויקיפדיה למקום הזה.' : 'למקום אין מיקום, ולכן לא הצלחתי לחפש עליו מידע. בחר מיקום בעריכה.'}</p><button class="btn soft sm" data-act="reEnrich" data-d="${S.days.findIndex((d) => d.stops.includes(s))}" data-id="${s.id}">לחפש שוב</button></div>`;
+    return `<div class="card story"><h2 style="margin-bottom:8px">על המקום</h2><p class="muted">${hasGeo(s) ? 'לא מצאתי ערך בוויקיפדיה למקום הזה.' : 'למקום אין מיקום, ולכן לא הצלחתי לחפש עליו מידע. בחר מיקום בעריכה.'}</p><button class="btn soft sm" data-act="reEnrich" data-id="${s.id}">לחפש שוב</button></div>`;
   }
   return `<div class="card story" id="story-text">
     <div class="row" style="margin-bottom:8px"><h2 class="grow">הסיפור</h2>${speakBtn('he-IL')}</div>
@@ -535,12 +631,28 @@ function installCard() {
   return '<div class="card muted">להתקנה: בכרום לוחצים ⋮ ← "הוסף למסך הבית". באייפון: Safari ← שיתוף ← "הוסף למסך הבית".</div>';
 }
 
+/* ---------- photo viewer ---------- */
+let galleryImgs = [], lbIdx = 0;
+function openLightbox(i) {
+  if (!galleryImgs.length) return; lbIdx = (i + galleryImgs.length) % galleryImgs.length;
+  let b = $('#lb'); if (!b) { b = document.createElement('div'); b.id = 'lb'; b.setAttribute('role', 'dialog'); b.setAttribute('aria-modal', 'true'); document.body.appendChild(b); }
+  b.classList.remove('zoom');
+  b.innerHTML = `<div class="lb-scroll" data-act="lbZoom"><img src="${esc(galleryImgs[lbIdx])}" alt="תמונה ${lbIdx + 1}"></div>
+    <button class="lb-btn lb-x" data-act="lbClose" aria-label="סגירה">${ic('x')}</button>
+    ${galleryImgs.length > 1 ? `<button class="lb-btn lb-prev" data-act="lbNav" data-dir="-1" aria-label="הקודמת">‹</button><button class="lb-btn lb-next" data-act="lbNav" data-dir="1" aria-label="הבאה">›</button>` : ''}
+    <div class="lb-count">${lbIdx + 1} / ${galleryImgs.length} · הקש להגדלה</div>`;
+  let x0 = null; const sc = b.querySelector('.lb-scroll');
+  sc.addEventListener('touchstart', (ev) => { x0 = ev.touches.length === 1 && !b.classList.contains('zoom') ? ev.touches[0].clientX : null; }, { passive: true });
+  sc.addEventListener('touchend', (ev) => { if (x0 == null) return; const dx = ev.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) { ev.preventDefault(); openLightbox(lbIdx + (dx < 0 ? 1 : -1)); } x0 = null; });
+}
+document.addEventListener('keydown', (ev) => { if (!$('#lb')) return; if (ev.key === 'Escape') A.lbClose(); if (ev.key === 'ArrowLeft') openLightbox(lbIdx + 1); if (ev.key === 'ArrowRight') openLightbox(lbIdx - 1); });
+
 /* ---------- render + routing ---------- */
 function render() {
   const h = (location.hash || '#today').slice(1); const [name, ...args] = h.split('/');
   const view = V[name] || V.today;
   const top = ['today', 'map', 'discover', 'saved', 'more'];
-  const tab = top.includes(name) ? name : (['place', 'places'].includes(name) ? 'today' : 'more');
+  const tab = top.includes(name) ? name : name === 'place' && args[0] === 's' ? 'saved' : (['place', 'places'].includes(name) ? 'today' : 'more');
   document.querySelectorAll('.tabbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
   if (name !== 'map' && map) { map.remove(); map = null; layer = null; }
   if (name === 'map' && map) return; // keep leaflet alive
@@ -548,7 +660,7 @@ function render() {
   $('#app').innerHTML = view(...args);
   if (name === 'map') mountMap();
 }
-window.addEventListener('hashchange', () => { closeSheet(); window.scrollTo(0, 0); render(); });
+window.addEventListener('hashchange', () => { closeSheet(); A.lbClose(); window.scrollTo(0, 0); render(); });
 
 /* ---------- sheets ---------- */
 function placeSheet(di, si) {
@@ -585,7 +697,23 @@ const A = {
       <div class="row"><button class="btn sun grow" data-act="sortApply">להחליף לסדר הזה</button><button class="btn soft" data-act="closeSheet">להשאיר</button></div>`);
     sheetCtx = { kind: 'sort', i, ids: order.concat(rest).map((s) => s.id) };
   },
-  reEnrich: (e) => { const s = S.days[+e.dataset.d].stops.find((x) => x.id === e.dataset.id); if (!s) return; delete s.details; enrichStop(s, true); render(); toast('מחפש מידע…'); },
+  reEnrich: (e) => { const s = [...S.days.flatMap((d) => d.stops), ...S.saved].find((x) => x.id === e.dataset.id); if (!s) return; delete s.details; retried.delete(s.id); enrichStop(s, true); render(); toast('מחפש מידע…'); },
+  lightbox: (e) => openLightbox(+e.dataset.i),
+  lbNav: (e) => openLightbox(lbIdx + +e.dataset.dir),
+  lbZoom: () => { const b = $('#lb'); if (b) b.classList.toggle('zoom'); },
+  lbClose: () => { const b = $('#lb'); if (b) b.remove(); },
+  savedIdentify: (e) => { const x = S.saved.find((o) => o.id === e.dataset.id); if (x) identifySheet(x); },
+  idFind: async (e) => {
+    const x = S.saved.find((o) => o.id === e.dataset.id); const text = $('#id-text').value.trim(); if (!x || !text) { toast('כתוב שם או הדבק כיתוב'); return; }
+    x.caption = text; save();
+    $('#id-results').innerHTML = '<span class="muted">מחפש…</span>';
+    let res = []; try { res = await findPlaceIn(text); } catch (err) { /* offline */ }
+    if (!$('#id-results')) return;
+    sheetCtx.results = res;
+    $('#id-results').innerHTML = res.length ? '<span class="muted">בחר את המקום:</span>' + res.map((r, k) => `<button class="card" style="border:0;text-align:right;cursor:pointer" data-act="idPick" data-k="${k}"><b>${esc(r.name)}</b><div class="muted">${esc(r.sub || '')}</div></button>`).join('') : '<span class="muted">לא מצאתי. נסה רק את שם המקום, באנגלית או בספרדית.</span>';
+  },
+  idPick: (e) => { const x = S.saved.find((o) => o.id === sheetCtx.id); const r = sheetCtx.results[+e.dataset.k]; closeSheet(); applyPlace(x, r); render(); toast('המקום נשמר. מביא מידע ותמונות…'); },
+  savedToDayById: (e) => { const i = S.saved.findIndex((o) => o.id === e.dataset.id); if (i >= 0) A.savedToDay({ dataset: { i } }); },
   install: async () => { if (!installEvt) return; installEvt.prompt(); const r = await installEvt.userChoice; installEvt = null; if (r.outcome !== 'accepted') toast('אפשר להתקין גם מתפריט ⋮ בכרום'); render(); },
   moveTo: (e) => {
     const d = +e.dataset.d, to = +e.dataset.to; const k = S.days[d].stops.findIndex((x) => x.id === e.dataset.id); if (k < 0) return;
@@ -600,15 +728,22 @@ const A = {
     navigator.geolocation.getCurrentPosition((p) => { const ll = [p.coords.latitude, p.coords.longitude]; if (meMarker) meMarker.remove(); meMarker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="mk me"></div>', iconSize: [18, 18] }) }).addTo(map); map.setView(ll, 15); }, () => toast('לא קיבלתי הרשאה למיקום'));
   },
   disc: (e) => { discTab = e.dataset.t; render(); },
-  discSave: (e) => { const d = T.discover[discTab][+e.dataset.k]; S.saved.unshift({ id: uid(), title: d.name, url: gmSearch(d), fav: true, lat: d.lat, lng: d.lng }); save(); toast('נשמר במועדפים ★'); },
-  discAdd: (e) => { const d = T.discover[discTab][+e.dataset.k]; daySheet((di) => { const ns = { id: uid(), kind: d.kind, name: d.name, note: d.note, lat: d.lat, lng: d.lng }; S.days[di].stops.push(ns); save(); toast(`נוסף ליום ${META[di].short}`); enrichStop(ns, true); }); },
+  discSave: (e) => { const d = T.discover[discTab][+e.dataset.k]; const x = { id: uid(), title: d.name, name: d.name, url: gmSearch(d), fav: true, lat: d.lat, lng: d.lng, kind: d.kind, status: 'found' }; S.saved.unshift(x); save(); toast('נשמר במועדפים ★'); if (hasGeo(x)) enrichStop(x, true); },
+  discAdd: (e) => { const d = T.discover[discTab][+e.dataset.k]; daySheet((di) => { const ns = { id: uid(), kind: d.kind, name: d.name, note: d.note, lat: d.lat, lng: d.lng }; S.days[di].stops.push(ns); save(); toast(`נוסף ליום ${META[di].short} · מופיע במפה ובניווט`); enrichStop(ns, true); }); },
   addLink: () => { const v = $('#sv-link').value.trim(); addShared(v, ''); },
   savedTab: (e) => { savedTab = e.dataset.t; render(); },
   savedFav: (e) => { const x = S.saved[+e.dataset.i]; x.fav = !x.fav; save(); render(); toast(x.fav ? 'נשמר במועדפים ★' : 'הוסר מהמועדפים'); },
   savedDel: (e) => { S.saved.splice(+e.dataset.i, 1); save(); render(); toast('נמחק'); },
   savedToDay: (e) => {
     const i = +e.dataset.i; const x = S.saved[i];
-    daySheet((di) => { S.days[di].stops.push({ id: uid(), kind: 'star', name: x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat, lng: x.lng, url: x.url }); x.day = META[di].short; save(); render(); const ns = S.days[di].stops[S.days[di].stops.length - 1]; enrichStop(ns, true); if (!hasGeo(x)) { placeSheet(di, S.days[di].stops.length - 1); toast('נוסף. אפשר לבחור מיקום מדויק, או שאחפש אותו לבד'); } else toast(`נוסף ליום ${META[di].short}`); });
+    const l = linkedStop(x); if (l) { location.hash = `#place/${l.di}/${l.st.id}`; return; }
+    daySheet((di) => {
+      const ns = { id: uid(), kind: x.kind || 'star', name: x.name || x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat ?? null, lng: x.lng ?? null, osm: x.osm || null, url: x.url, savedId: x.id };
+      if (x.details) ns.details = x.details;
+      S.days[di].stops.push(ns); x.day = META[di].short; save(); render();
+      if (!ns.details) enrichStop(ns, true);
+      if (!hasGeo(ns)) { identifySheet(x); toast('נוסף. בוא נזהה את המקום כדי שיופיע במפה ובניווט'); } else toast(`נוסף ליום ${META[di].short} · מופיע במפה ובניווט`);
+    });
   },
   placeAdd: (e) => placeSheet(+e.dataset.d, null),
   placeEdit: (e) => placeSheet(+e.dataset.d, +e.dataset.s),
@@ -720,9 +855,11 @@ function addShared(text, title) {
   const url = m[0]; const k = srcKind(url);
   let name = (title || text.replace(url, '')).trim().replace(/\s+/g, ' ').slice(0, 80);
   if (!name) name = k === 'ig' ? 'פוסט מאינסטגרם' : k === 'tt' ? 'סרטון מטיקטוק' : k === 'pin' ? 'מקום מ־Google Maps' : 'קישור חדש';
-  S.saved.unshift({ id: uid(), url, title: name, fav: false }); save(); savedTab = 'inbox';
+  const x = { id: uid(), url, title: name, fav: false }; S.saved.unshift(x); save(); savedTab = 'inbox';
   if (location.hash !== '#saved') location.hash = '#saved'; else render();
-  toast('נוסף לשמורים'); return true;
+  toast('נוסף לשמורים · מזהה את המקום…');
+  identify(x, [title, text].filter(Boolean).join('\n'));
+  return true;
 }
 (function handleShare() {
   const p = new URLSearchParams(location.search);

@@ -204,6 +204,23 @@ window.Enrich = (() => {
     return out;
   }
 
+  /* ---------- photos: OSM image tag + Wikimedia Commons photos taken at the spot ---------- */
+  async function photosNear(stop, tags) {
+    const out = []; const t = tags || {};
+    if (t.image && /^https:\/\/\S+\.(jpe?g|png|webp)$/i.test(t.image)) out.push(t.image);
+    if (stop.lat == null) return out;
+    try {
+      const d = await getJSON(`https://commons.wikimedia.org/w/api.php?action=query&generator=geosearch&ggscoord=${stop.lat}|${stop.lng}&ggsradius=70&ggsnamespace=6&ggslimit=20&prop=imageinfo&iiprop=url&iiurlwidth=1000&format=json&origin=*`, 1, 10000);
+      const words = norm(stop.name).split(' ').filter((w) => w.length > 3);
+      const pages = Object.values((d.query || {}).pages || {}).filter((p) => /\.(jpe?g|png|webp)$/i.test(p.title) && p.imageinfo && p.imageinfo[0] && p.imageinfo[0].thumburl);
+      // Photos whose file name mentions the place come first
+      const score = (p) => words.filter((w) => norm(p.title).includes(w)).length;
+      pages.sort((a, b) => score(b) - score(a) || (a.index || 0) - (b.index || 0));
+      pages.forEach((p) => out.push(p.imageinfo[0].thumburl));
+    } catch (e) { /* no photos now */ }
+    return [...new Set(out)].slice(0, 12);
+  }
+
   /* ---------- main: gather everything for a stop ---------- */
   async function details(stop) {
     const out = { at: Date.now() };
@@ -221,9 +238,10 @@ window.Enrich = (() => {
       out.wiki = await wikiFromTags(t);
     }
     if (!out.wiki) out.wiki = await wikiByGeo(stop);
+    out.photos = await photosNear(stop, osm && osm.tags);
     out.partial = !!out.osmErr || (!osm && !out.wiki);
     return out;
   }
 
-  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate };
+  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear };
 })();
