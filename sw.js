@@ -1,6 +1,6 @@
 // App shell is cached for offline use; live data (map tiles, weather, rates, Wikipedia) goes to the network.
-const CACHE = 'bcn-v9';
-const SHELL = ['./', './index.html', './styles.css?v=9', './app.js?v=9', './data.js?v=9', './stories.js?v=9', './enrich.js?v=9', './manifest.webmanifest', './icons/icon-192.png', './vendor/leaflet/leaflet.css', './vendor/leaflet/leaflet.js'];
+const CACHE = 'bcn-v10';
+const SHELL = ['./', './index.html', './styles.css?v=10', './app.js?v=10', './data.js?v=10', './stories.js?v=10', './enrich.js?v=10', './manifest.webmanifest', './icons/icon-192.png', './vendor/leaflet/leaflet.css', './vendor/leaflet/leaflet.js'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {

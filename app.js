@@ -76,7 +76,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '9 · 11.11';
+const VERSION = '10 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -141,6 +141,11 @@ async function loadRate() {
   } catch (e) { const c = JSON.parse(localStorage.getItem('bcn.rate') || 'null'); if (c) rate = c; }
 }
 /* place details: OpenStreetMap + Wikipedia (see enrich.js) */
+const normName = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+function storyFor(s) {
+  const all = window.STORIES || {}; if (s.story && all[s.story]) return all[s.story];
+  const n = normName(s.name); return Object.values(all).find((st) => (st.names || []).some((x) => n.includes(normName(x)))) || null;
+}
 const articles = {}; const articleLoading = {};
 function wikiRefOf(s) {
   if (s.details && s.details.wiki) return s.details.wiki;
@@ -163,8 +168,16 @@ const enriching = new Set(); const retried = new Set();
 async function enrichStop(stop, force) {
   if (!window.Enrich || enriching.has(stop.id) || stop.hotelRef) return;
   if (!force && stop.details && Date.now() - stop.details.at < (stop.details.partial ? 3600e3 : 7 * 864e5)) return;
-  if (!hasGeo(stop) && !stop.osm) return;
+  if (!hasGeo(stop) && !stop.osm) {
+    // No location picked: find it by name, inside the Barcelona area
+    try {
+      const r = (await searchPlaces(stop.name)).find((x) => x.lat > 41.2 && x.lat < 41.6 && x.lng > 1.9 && x.lng < 2.4);
+      if (r) { stop.lat = r.lat; stop.lng = r.lng; if (r.osm) stop.osm = r.osm; if ((!stop.kind || stop.kind === 'star') && r.kind) stop.kind = r.kind; save(); }
+    } catch (e) { /* offline */ }
+    if (!hasGeo(stop)) return;
+  }
   enriching.add(stop.id);
+  if (location.hash.startsWith('#place/')) setTimeout(render, 0);
   try {
     const d = await Enrich.details(stop);
     stop.details = d; if (d.osm && !stop.osm) stop.osm = d.osm;
@@ -176,7 +189,7 @@ async function enrichStop(stop, force) {
 }
 function enrichAllSlowly() {
   if (!navigator.onLine) return;
-  const todo = []; S.days.forEach((d) => d.stops.forEach((s) => { if (!s.hotelRef && (hasGeo(s) || s.osm) && (!s.details || Date.now() - s.details.at > (s.details.partial ? 3600e3 : 7 * 864e5))) todo.push(s); }));
+  const todo = []; S.days.forEach((d) => d.stops.forEach((s) => { if (!s.hotelRef && (!s.details || Date.now() - s.details.at > (s.details.partial ? 3600e3 : 7 * 864e5))) todo.push(s); }));
   let k = 0; const step = () => { if (k >= todo.length) return; enrichStop(todo[k++]).finally(() => setTimeout(step, 1500)); }; step();
 }
 async function searchPlaces(text) {
@@ -406,7 +419,7 @@ function infoCard(s) {
 }
 const paras = (t) => t.split(/\n+/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p)}</p>`).join('');
 function storyHTML(s, w) {
-  const st = s.story && window.STORIES && window.STORIES[s.story];
+  const st = storyFor(s);
   let wikiPart = '';
   if (w === 'loading') wikiPart = '<p class="muted">טוען מוויקיפדיה…</p>';
   else if (w && !w.err && w.intro) {
@@ -416,7 +429,11 @@ function storyHTML(s, w) {
   }
   const speakBtn = (lang) => `<button class="btn soft sm" data-act="speak" data-lang="${lang}">${ic('speaker')}הקרא לי</button>`;
   const wikiCard = wikiPart ? `<div class="card story" ${st ? '' : 'id="story-text"'}><div class="row" style="margin-bottom:8px"><h2 class="grow">${st ? 'מוויקיפדיה' : 'על המקום'}</h2>${!st && w && w.intro ? speakBtn(w.lang === 'he' ? 'he-IL' : 'en-US') : ''}</div>${wikiPart}</div>` : '';
-  if (!st) return wikiCard || (s.details || enriching.has(s.id) ? '' : '<div class="card story"><h2 style="margin-bottom:8px">על המקום</h2><p class="muted">לא מצאתי מידע על המקום. אפשר לבקש ממני לכתוב לו סיפור.</p></div>');
+  if (!st) {
+    if (wikiCard) return wikiCard;
+    if (enriching.has(s.id) || w === 'loading') return '<div class="card story"><h2 style="margin-bottom:8px">על המקום</h2><p class="muted">מחפש מידע על המקום… זה לוקח כמה שניות.</p></div>';
+    return `<div class="card story"><h2 style="margin-bottom:8px">על המקום</h2><p class="muted">${hasGeo(s) ? 'לא מצאתי ערך בוויקיפדיה למקום הזה.' : 'למקום אין מיקום, ולכן לא הצלחתי לחפש עליו מידע. בחר מיקום בעריכה.'}</p><button class="btn soft sm" data-act="reEnrich" data-d="${S.days.findIndex((d) => d.stops.includes(s))}" data-id="${s.id}">לחפש שוב</button></div>`;
+  }
   return `<div class="card story" id="story-text">
     <div class="row" style="margin-bottom:8px"><h2 class="grow">הסיפור</h2>${speakBtn('he-IL')}</div>
     <p>${esc(st.intro)}</p>
@@ -550,6 +567,7 @@ const A = {
       <div class="row"><button class="btn sun grow" data-act="sortApply">להחליף לסדר הזה</button><button class="btn soft" data-act="closeSheet">להשאיר</button></div>`);
     sheetCtx = { kind: 'sort', i, ids: order.concat(rest).map((s) => s.id) };
   },
+  reEnrich: (e) => { const s = S.days[+e.dataset.d].stops.find((x) => x.id === e.dataset.id); if (!s) return; delete s.details; enrichStop(s, true); render(); toast('מחפש מידע…'); },
   moveTo: (e) => {
     const d = +e.dataset.d, to = +e.dataset.to; const k = S.days[d].stops.findIndex((x) => x.id === e.dataset.id); if (k < 0) return;
     const [x] = S.days[d].stops.splice(k, 1); S.days[to].stops.push(x); save(); render(); toast(`"${x.name}" עבר ליום ${META[to].short}. אפשר לסדר את היום ב"סדר לי את היום"`);
