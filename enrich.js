@@ -221,6 +221,87 @@ window.Enrich = (() => {
     return [...new Set(out)].slice(0, 12);
   }
 
+  /* ---------- is it open now? (Barcelona time) ---------- */
+  function cityNow(date) {
+    const f = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date || new Date());
+    const g = (t) => (f.find((x) => x.type === t) || {}).value;
+    return { day: DAY[g('weekday').slice(0, 2)], min: +g('hour') * 60 + +g('minute') };
+  }
+  // true = open, false = closed, null = the hours are too complex or unknown
+  function openAt(str, date) {
+    if (!str) return null; str = str.trim();
+    if (/^24\/7$/.test(str)) return true;
+    const ranges = Array(7).fill(null); let any = false;
+    for (let rule of str.split(';').map((r) => r.trim()).filter(Boolean)) {
+      if (/^PH\b/.test(rule)) continue;
+      rule = rule.replace(/,PH\b/, '');
+      const m = rule.match(/^((?:(?:Mo|Tu|We|Th|Fr|Sa|Su)(?:-(?:Mo|Tu|We|Th|Fr|Sa|Su))?)(?:,(?:Mo|Tu|We|Th|Fr|Sa|Su)(?:-(?:Mo|Tu|We|Th|Fr|Sa|Su))?)*)?\s*(.*)$/);
+      if (!m) return null;
+      const [, spec, rest] = m; let days = [];
+      if (!spec) days = [0, 1, 2, 3, 4, 5, 6];
+      else spec.split(',').forEach((part) => { const [a, b] = part.split('-'); if (!b) days.push(DAY[a]); else { let i = ORDER.indexOf(a); const j = ORDER.indexOf(b); for (let n = 0; n < 7; n++) { days.push(DAY[ORDER[i]]); if (i === j) break; i = (i + 1) % 7; } } });
+      let rs = [];
+      if (/^(off|closed)$/i.test(rest)) rs = [];
+      else {
+        for (const t of rest.split(',').map((x) => x.trim())) {
+          const tm = t.match(/^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})\+?$/); if (!tm) return null;
+          rs.push([+tm[1] * 60 + +tm[2], +tm[3] * 60 + +tm[4]]);
+        }
+      }
+      any = true; days.forEach((d) => { ranges[d] = rs; });
+    }
+    if (!any) return null;
+    const { day, min } = cityNow(date); const prev = (day + 6) % 7;
+    if ((ranges[day] || []).some(([a, b]) => (b > a ? min >= a && min < b : min >= a))) return true;
+    if ((ranges[prev] || []).some(([a, b]) => b <= a && min < b)) return true;
+    return false;
+  }
+
+  /* ---------- live recommendations around a point (OpenStreetMap) ---------- */
+  const NEAR_Q = {
+    eat: (a) => `nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:vegan"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:gluten_free"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe)$"]["cuisine"~"vegan"];`,
+    drink: (a) => `nwr(${a})["amenity"~"^(bar|pub|biergarten)$"]["name"];nwr(${a})["amenity"="cafe"]["cuisine"~"coffee"]["name"];`,
+    see: (a) => `nwr(${a})["tourism"~"^(attraction|museum|viewpoint|gallery)$"]["name"];nwr(${a})["historic"~"^(monument|castle|church|palace|archaeological_site)$"]["name"];nwr(${a})["leisure"~"^(park|garden)$"]["name"]["wikidata"];nwr(${a})["amenity"="marketplace"]["name"];`
+  };
+  async function nearby(cat, lat, lng, radius) {
+    const a = `around:${radius || 900},${lat},${lng}`;
+    const q = `[out:json][timeout:20];(${NEAR_Q[cat](a)});out tags center 80;`;
+    let d = null;
+    for (const host of OVERPASS) { try { d = await getJSON(`${host}?data=${encodeURIComponent(q)}`, 1, 15000); break; } catch (err) { /* next server */ } }
+    if (!d) throw new Error('overpass unavailable');
+    const seen = new Set(); const out = [];
+    (d.elements || []).forEach((el) => {
+      const t = el.tags || {}; const name = t.name || t['name:en']; if (!name) return;
+      const la = el.lat ?? (el.center && el.center.lat), lo = el.lon ?? (el.center && el.center.lon); if (la == null) return;
+      const k = norm(name); if (seen.has(k)) return; seen.add(k);
+      const key = Object.keys(t).find((x) => ['amenity', 'tourism', 'leisure', 'historic', 'shop'].includes(x));
+      out.push({
+        id: 'o' + el.type[0] + el.id, name, nameHe: t['name:he'] || '', lat: la, lng: lo, osm: { type: el.type, id: el.id },
+        kind: kindFrom(key, t[key]) || (cat === 'eat' ? 'food' : cat === 'drink' ? 'bar' : 'star'), what: t[key] || '',
+        details: { at: Date.now(), hours: t.opening_hours ? parseHours(t.opening_hours) : null, hoursRaw: t.opening_hours || '', website: t.website || t['contact:website'] || '', phone: t.phone || t['contact:phone'] || '', vegan: t['diet:vegan'] || '', gf: t['diet:gluten_free'] || '', cuisine: t.cuisine || '', nameHe: t['name:he'] || '' },
+        hasWiki: !!(t.wikidata || t.wikipedia)
+      });
+    });
+    return out;
+  }
+  // Wikipedia articles about places around a point: Hebrew first, then English
+  async function wikiNearby(lat, lng, radius) {
+    const out = [];
+    for (const lang of ['he', 'en']) {
+      try {
+        const d = await getJSON(`https://${lang}.wikipedia.org/w/api.php?action=query&generator=geosearch&ggscoord=${lat}|${lng}&ggsradius=${radius || 1000}&ggslimit=25&prop=coordinates|pageimages|description&piprop=thumbnail&pithumbsize=400&format=json&origin=*`, 1, 12000);
+        Object.values((d.query || {}).pages || {}).forEach((p) => {
+          if (!p.coordinates || !p.coordinates[0]) return;
+          if (/^(Barcelona|Eixample|Ciutat Vella|Spain|Catalonia)$/i.test(p.title) || /^(ברצלונה|ספרד|קטלוניה)$/.test(p.title)) return;
+          if (lang === 'en' && out.some((o) => Math.abs(o.lat - p.coordinates[0].lat) < 0.0003 && Math.abs(o.lng - p.coordinates[0].lon) < 0.0003)) return;
+          out.push({ id: 'w' + lang + p.pageid, name: p.title, lat: p.coordinates[0].lat, lng: p.coordinates[0].lon, kind: 'gaudi', what: p.description || '', thumb: p.thumbnail ? p.thumbnail.source : '', wikiFixed: { lang, title: p.title }, lang });
+        });
+      } catch (e) { /* try the other language */ }
+      if (out.length >= 12) break;
+    }
+    return out;
+  }
+
   /* ---------- main: gather everything for a stop ---------- */
   async function details(stop) {
     const out = { at: Date.now() };
@@ -243,5 +324,5 @@ window.Enrich = (() => {
     return out;
   }
 
-  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear };
+  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear, openAt, nearby, wikiNearby };
 })();
