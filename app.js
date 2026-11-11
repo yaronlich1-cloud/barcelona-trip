@@ -76,7 +76,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '11 · 11.11';
+const VERSION = '12 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -409,7 +409,7 @@ function infoCard(s) {
   const h = hoursOf(s); if (h) rows.push(['שעות פתיחה', esc(h)]);
   if (d.vegan) rows.push(['טבעוני', esc(dietWord(d.vegan, 'טבעוני'))]);
   if (d.gf) rows.push(['ללא גלוטן', esc(dietWord(d.gf, 'ללא גלוטן'))]);
-  if (d.cuisine) rows.push(['מטבח', esc(d.cuisine.replace(/;/g, ', '))]);
+  if (d.cuisine) rows.push(['מטבח', esc(d.cuisine.split(';').map((c) => CUISINE[c.trim()] || c.trim().replace(/_/g, ' ')).join(', '))]);
   if (d.website) rows.push(['אתר', `<a href="${esc(d.website)}" target="_blank" rel="noopener" dir="ltr">${esc(d.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a>`]);
   if (d.phone) rows.push(['טלפון', `<a href="tel:${esc(d.phone.replace(/\s/g, ''))}" dir="ltr">${esc(d.phone)}</a>`]);
   const pending = enriching.has(s.id);
@@ -419,18 +419,22 @@ function infoCard(s) {
     ${pending ? '<span class="muted">מחפש עוד פרטים על המקום…</span>' : ''}
     ${d.hours && !(s.rule && T.rules[s.rule]) ? '<span class="muted">שעות לפי OpenStreetMap. כדאי לוודא לפני שהולכים.</span>' : ''}</div>`;
 }
+const CUISINE = { vegan: 'טבעוני', vegetarian: 'צמחוני', pizza: 'פיצה', sushi: 'סושי', japanese: 'יפני', mediterranean: 'ים תיכוני', spanish: 'ספרדי', catalan: 'קטלאני', tapas: 'טאפאס', coffee_shop: 'בית קפה', cafe: 'בית קפה', burger: 'המבורגרים', mexican: 'מקסיקני', italian: 'איטלקי', indian: 'הודי', healthy: 'בריא', bakery: 'מאפייה', brunch: 'בראנץ׳', breakfast: 'ארוחת בוקר', seafood: 'פירות ים', international: 'בינלאומי', asian: 'אסייתי', chinese: 'סיני', thai: 'תאילנדי', juice: 'מיצים', ice_cream: 'גלידה', cocktails: 'קוקטיילים', regional: 'מקומי', salad: 'סלטים', sandwich: 'כריכים', ramen: 'ראמן', middle_eastern: 'מזרח תיכוני', lebanese: 'לבנוני', greek: 'יווני', french: 'צרפתי', wine: 'יין' };
+const cut = (t, n) => (t.length > n ? t.slice(0, n).replace(/\s+\S*$/, '') + '…' : t);
 const paras = (t) => t.split(/\n+/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p)}</p>`).join('');
 function storyHTML(s, w) {
   const st = storyFor(s);
   let wikiPart = '';
   if (w === 'loading') wikiPart = '<p class="muted">טוען מוויקיפדיה…</p>';
   else if (w && !w.err && w.intro) {
-    wikiPart = `${paras(w.intro)}
-      ${w.sections.map((x) => `<details style="margin:6px 0;border-top:1px solid var(--line);padding-top:8px"><summary style="font-weight:800;cursor:pointer">${esc(x.title)}</summary><div style="margin-top:8px">${paras(x.body)}</div></details>`).join('')}
-      <a class="muted" href="${esc(w.url)}" target="_blank" rel="noopener">הערך המלא בוויקיפדיה${w.lang === 'en' ? ' (באנגלית)' : ''} ←</a>`;
+    const en = w.lang === 'en';
+    wikiPart = `${en && w.introHe ? paras(w.introHe) : paras(w.intro)}
+      ${en ? `<p class="muted">${w.introHe ? 'תורגם אוטומטית מוויקיפדיה באנגלית.' : 'אין ערך בעברית, והתרגום האוטומטי לא זמין כרגע. ננסה שוב בפעם הבאה.'}</p>` : ''}
+      ${w.sections.map((x, k) => `<details style="margin:6px 0;border-top:1px solid var(--line);padding-top:8px" ${en ? `data-tr="${k}"` : ''}><summary style="font-weight:800;cursor:pointer">${esc(en ? (x.titleHe || x.title) : x.title)}</summary><div style="margin-top:8px">${en ? (x.bodyHe ? paras(x.bodyHe) : '<p class="muted">מתרגם…</p>') : paras(x.body)}</div></details>`).join('')}
+      <a class="muted" href="${esc(w.url)}" target="_blank" rel="noopener">הערך המלא בוויקיפדיה${en ? ' (באנגלית)' : ''} ←</a>`;
   }
   const speakBtn = (lang) => `<button class="btn soft sm" data-act="speak" data-lang="${lang}">${ic('speaker')}הקרא לי</button>`;
-  const wikiCard = wikiPart ? `<div class="card story" ${st ? '' : 'id="story-text"'}><div class="row" style="margin-bottom:8px"><h2 class="grow">${st ? 'מוויקיפדיה' : 'על המקום'}</h2>${!st && w && w.intro ? speakBtn(w.lang === 'he' ? 'he-IL' : 'en-US') : ''}</div>${wikiPart}</div>` : '';
+  const wikiCard = wikiPart ? `<div class="card story" ${st ? '' : 'id="story-text"'}><div class="row" style="margin-bottom:8px"><h2 class="grow">${st ? 'מוויקיפדיה' : 'על המקום'}</h2>${!st && w && w.intro ? speakBtn(w.lang === 'he' || w.introHe ? 'he-IL' : 'en-US') : ''}</div>${wikiPart}</div>` : '';
   if (!st) {
     if (wikiCard) return wikiCard;
     if (enriching.has(s.id) || w === 'loading') return '<div class="card story"><h2 style="margin-bottom:8px">על המקום</h2><p class="muted">מחפש מידע על המקום… זה לוקח כמה שניות.</p></div>';
@@ -698,6 +702,14 @@ document.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]'); if (!el) return;
   const fn = A[el.dataset.act]; if (!fn) return; ev.preventDefault(); fn(el);
 });
+document.addEventListener('toggle', async (ev) => {
+  const d = ev.target; if (!d.open || d.dataset.tr == null) return;
+  const w = Object.values(articles).find((x) => x && x.sections && d.closest('.story') && x.lang === 'en' && x.sections[+d.dataset.tr] && (x.sections[+d.dataset.tr].titleHe || x.sections[+d.dataset.tr].title) === d.querySelector('summary').textContent);
+  if (!w) return; const sec = w.sections[+d.dataset.tr]; if (sec.bodyHe) return;
+  try { sec.bodyHe = await Enrich.translate(cut(sec.body, 1500)); try { localStorage.setItem(`bcn.wk:en:${w.title}`, JSON.stringify(w)); } catch (e) { /* full */ } }
+  catch (err) { sec.bodyHe = ''; d.querySelector('div').innerHTML = paras(sec.body) + '<p class="muted">התרגום לא זמין כרגע, מוצג באנגלית.</p>'; return; }
+  d.querySelector('div').innerHTML = paras(sec.bodyHe);
+}, true);
 document.addEventListener('input', (ev) => {
   if (ev.target.id === 'conv') { convEur = ev.target.value.replace(',', '.'); const pos = ev.target.selectionStart; render(); const n = $('#conv'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } }
 });

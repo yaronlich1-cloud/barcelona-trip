@@ -15,6 +15,41 @@ window.Enrich = (() => {
   const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9֐-׿ ]+/g, ' ').replace(/\s+/g, ' ').trim();
   const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\"]/g, '\\$&');
 
+  const cut = (t, n) => (t.length > n ? t.slice(0, n).replace(/\s+\S*$/, '') + '…' : t);
+  /* ---------- translation to Hebrew ---------- */
+  // Chrome's built-in translator when the phone has it; otherwise the free MyMemory service (about 5,000 characters a day per phone).
+  let builtIn = null;
+  async function translate(text) {
+    text = String(text || '').trim(); if (!text) return '';
+    let h = 0; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+    const key = 'bcn.tr:' + h + ':' + text.length;
+    try { const c = localStorage.getItem(key); if (c) return c; } catch (err) { /* ignore */ }
+    let out = null;
+    try {
+      // Use the phone's own translator only when its Hebrew model is already installed: creating one can wait for a long download.
+      if (!builtIn && 'Translator' in self && self.Translator.availability) {
+        const opts = { sourceLanguage: 'en', targetLanguage: 'he' };
+        const av = await Promise.race([self.Translator.availability(opts), new Promise((r) => setTimeout(() => r('timeout'), 1500))]);
+        if (av === 'available') builtIn = await Promise.race([self.Translator.create(opts), new Promise((r) => setTimeout(() => r(null), 3000))]);
+      }
+      if (builtIn) out = await Promise.race([builtIn.translate(text), new Promise((r) => setTimeout(() => r(null), 8000))]);
+    } catch (err) { builtIn = null; }
+    if (!out) {
+      const pieces = []; let cur = '';
+      text.split(/(?<=[.!?])\s+/).forEach((sen) => { if ((cur + ' ' + sen).length > 450 && cur) { pieces.push(cur); cur = sen; } else cur = cur ? cur + ' ' + sen : sen; });
+      if (cur) pieces.push(cur);
+      const res = [];
+      for (const piece of pieces) {
+        const d = await getJSON(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(piece.slice(0, 480))}&langpair=en|he`, 1, 15000);
+        if (d.responseStatus !== 200 || d.quotaFinished) throw new Error('translation quota');
+        res.push(d.responseData.translatedText);
+      }
+      out = res.join(' ');
+    }
+    try { localStorage.setItem(key, out); } catch (err) { /* storage full */ }
+    return out;
+  }
+
   /* ---------- OpenStreetMap ---------- */
   async function osmTags(stop) {
     let q;
@@ -123,7 +158,13 @@ window.Enrich = (() => {
   const SKIP = /^(references|notes|see also|external links|further reading|bibliography|gallery|sources|הערות שוליים|קישורים חיצוניים|ראו גם|לקריאה נוספת|מקורות|גלריה|גלריית תמונות)$/i;
   async function wikiArticle(ref) {
     const key = `bcn.wk:${ref.lang}:${ref.title}`;
-    try { const c = JSON.parse(localStorage.getItem(key) || 'null'); if (c && Date.now() - c.at < 14 * 864e5) return c; } catch (e) { /* ignore */ }
+    try {
+      const c = JSON.parse(localStorage.getItem(key) || 'null');
+      if (c && Date.now() - c.at < 14 * 864e5) {
+        if (c.lang === 'en' && !c.introHe) { try { c.introHe = await translate(cut(c.intro, 1400)); const t = await translate(c.sections.map((s) => s.title).join(' | ')).then((x) => x.split(/\s*\|\s*/)); if (t.length === c.sections.length) c.sections.forEach((s, i) => { s.titleHe = t[i]; }); localStorage.setItem(key, JSON.stringify(c)); } catch (err) { /* later */ } }
+        return c;
+      }
+    } catch (e) { /* ignore */ }
     const host = `https://${ref.lang}.wikipedia.org`;
     const d = await getJSON(`${host}/w/api.php?action=query&prop=extracts|pageimages|langlinks&lllang=en&piprop=original&explaintext=1&exsectionformat=wiki&redirects=1&titles=${encodeURIComponent(ref.title)}&format=json&origin=*`);
     const page = Object.values(d.query.pages)[0];
@@ -152,6 +193,13 @@ window.Enrich = (() => {
     }
     if (!images.length && page.original && page.original.source) images = [page.original.source];
     const out = { at: Date.now(), lang: ref.lang, title: page.title, intro: intro.slice(0, 3000), sections: keep, images, url: `${host}/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}` };
+    if (ref.lang === 'en') {
+      try {
+        out.introHe = await translate(cut(intro, 1400));
+        const titles = await translate(keep.map((s) => s.title).join(' | '));
+        const parts = titles.split(/\s*\|\s*/); if (parts.length === keep.length) keep.forEach((s, i) => { s.titleHe = parts[i]; });
+      } catch (err) { out.trErr = true; }
+    }
     try { localStorage.setItem(key, JSON.stringify(out)); } catch (e) { /* storage full */ }
     return out;
   }
@@ -177,5 +225,5 @@ window.Enrich = (() => {
     return out;
   }
 
-  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn };
+  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate };
 })();
