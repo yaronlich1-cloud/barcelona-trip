@@ -261,6 +261,7 @@ window.Enrich = (() => {
   const NEAR_Q = {
     eat: (a) => `nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:vegan"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:gluten_free"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe)$"]["cuisine"~"vegan"];`,
     drink: (a) => `nwr(${a})["amenity"~"^(bar|pub|biergarten)$"]["name"];nwr(${a})["amenity"="cafe"]["cuisine"~"coffee"]["name"];`,
+    shop: (a) => `nwr(${a})["shop"~"^(clothes|shoes|department_store|fashion_accessories)$"]["brand"~"Zara|Mango|Uniqlo|Pull&Bear|Bershka|Massimo Dutti|Stradivarius|Oysho|H&M|Primark|Corte Ingl|Desigual|COS|Lefties",i];nwr(${a})["shop"~"^(clothes|department_store)$"]["name"~"Zara|Mango|Uniqlo|Pull&Bear|Massimo Dutti|Primark|Corte Ingl",i];`,
     see: (a) => `nwr(${a})["tourism"~"^(attraction|museum|viewpoint|gallery)$"]["name"];nwr(${a})["historic"~"^(monument|castle|church|palace|archaeological_site)$"]["name"];nwr(${a})["leisure"~"^(park|garden)$"]["name"]["wikidata"];nwr(${a})["amenity"="marketplace"]["name"];`
   };
   async function nearby(cat, lat, lng, radius) {
@@ -277,7 +278,7 @@ window.Enrich = (() => {
       const key = Object.keys(t).find((x) => ['amenity', 'tourism', 'leisure', 'historic', 'shop'].includes(x));
       out.push({
         id: 'o' + el.type[0] + el.id, name, nameHe: t['name:he'] || '', lat: la, lng: lo, osm: { type: el.type, id: el.id },
-        kind: kindFrom(key, t[key]) || (cat === 'eat' ? 'food' : cat === 'drink' ? 'bar' : 'star'), what: t[key] || '',
+        kind: kindFrom(key, t[key]) || (cat === 'eat' ? 'food' : cat === 'drink' ? 'bar' : cat === 'shop' ? 'shop' : 'star'), what: t[key] || '', brand: t.brand || '',
         details: { at: Date.now(), hours: t.opening_hours ? parseHours(t.opening_hours) : null, hoursRaw: t.opening_hours || '', website: t.website || t['contact:website'] || '', phone: t.phone || t['contact:phone'] || '', vegan: t['diet:vegan'] || '', gf: t['diet:gluten_free'] || '', cuisine: t.cuisine || '', nameHe: t['name:he'] || '' },
         hasWiki: !!(t.wikidata || t.wikipedia)
       });

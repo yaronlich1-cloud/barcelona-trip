@@ -37,6 +37,7 @@ const P = {
   sort: '<path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/>',
   warn: '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v.5"/>',
   locate: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>', check: '<path d="M5 12l5 5 9-10"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   museum: '<path d="M3 21h18M4 10h16M12 3l9 5H3zM6 10v8M10 10v8M14 10v8M18 10v8"/>',
@@ -73,10 +74,11 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
     if (src.lat != null && s.lat == null && !s.hotelRef) { s.lat = src.lat; s.lng = src.lng; }
   }));
   if (!S.hotel) S.hotel = { name: '', address: '', lat: null, lng: null };
+  if (!S.wish) S.wish = [];
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '14 · 11.11';
+const VERSION = '15 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -120,17 +122,46 @@ function legInfo(a, b) {
 function setDayColor(i) { document.documentElement.style.setProperty('--day', META[i].color); }
 
 /* ---------- remote data ---------- */
-let weather = null, rate = null;
+let weather = null, rate = null, climate = null;
+// Real forecast: opens 16 days before the trip. Until then: the average of the last 10 years for the same dates.
 async function loadWeather() {
   try {
-    const cached = JSON.parse(sessionStorage.getItem('bcn.w') || 'null');
-    if (cached) { weather = cached; return; }
-    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=41.39&longitude=2.17&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FMadrid&start_date=2026-12-13&end_date=2026-12-17');
-    if (!r.ok) return;
-    const j = await r.json(); if (!j.daily) return;
-    weather = {}; j.daily.time.forEach((d, i) => { weather[d] = { max: Math.round(j.daily.temperature_2m_max[i]), min: Math.round(j.daily.temperature_2m_min[i]), rain: j.daily.precipitation_probability_max[i] }; });
-    sessionStorage.setItem('bcn.w', JSON.stringify(weather)); render();
+    const cached = JSON.parse(sessionStorage.getItem('bcn.w2') || 'null');
+    if (cached) { weather = cached; } else {
+      const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=41.39&longitude=2.17&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,wind_speed_10m_max,sunrise,sunset&hourly=temperature_2m,precipitation_probability,weather_code&timezone=Europe%2FMadrid&start_date=2026-12-13&end_date=2026-12-17');
+      if (r.ok) {
+        const j = await r.json();
+        if (j.daily) {
+          weather = {}; const D = j.daily; const tm = (x) => (x || '').slice(11, 16);
+          D.time.forEach((d, i) => { weather[d] = { max: Math.round(D.temperature_2m_max[i]), min: Math.round(D.temperature_2m_min[i]), rain: D.precipitation_probability_max[i], code: D.weather_code[i], wind: Math.round(D.wind_speed_10m_max[i]), sunrise: tm(D.sunrise[i]), sunset: tm(D.sunset[i]), hours: [] }; });
+          (j.hourly && j.hourly.time || []).forEach((t, i) => { const w = weather[t.slice(0, 10)]; const h = +t.slice(11, 13); if (w && h >= 8 && h <= 22 && h % 2 === 0) w.hours.push({ h, t: Math.round(j.hourly.temperature_2m[i]), p: j.hourly.precipitation_probability[i], c: j.hourly.weather_code[i] }); });
+          sessionStorage.setItem('bcn.w2', JSON.stringify(weather)); render();
+        }
+      }
+    }
   } catch (e) { /* forecast not available yet */ }
+  loadClimate();
+}
+async function loadClimate() {
+  try { const c = JSON.parse(localStorage.getItem('bcn.clim') || 'null'); if (c) { climate = c; return; } } catch (e) { /* ignore */ }
+  try {
+    const r = await fetch('https://archive-api.open-meteo.com/v1/archive?latitude=41.39&longitude=2.17&start_date=2015-12-13&end_date=2025-12-17&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,sunrise,sunset&timezone=Europe%2FMadrid');
+    const j = await r.json(); if (!j.daily) return; const D = j.daily; const by = {};
+    D.time.forEach((t, i) => { const md = t.slice(5); if (md < '12-13' || md > '12-17' || D.temperature_2m_max[i] == null) return; (by[md] = by[md] || []).push(i); });
+    const avg = (ix, a) => ix.reduce((s2, i) => s2 + a[i], 0) / ix.length;
+    climate = {}; Object.entries(by).forEach(([md, ix]) => { const last = ix[ix.length - 1]; climate[md] = { max: Math.round(avg(ix, D.temperature_2m_max)), min: Math.round(avg(ix, D.temperature_2m_min)), rainy: Math.round(100 * ix.filter((i) => D.precipitation_sum[i] >= 1).length / ix.length), years: ix.length, sunrise: (D.sunrise[last] || '').slice(11, 16), sunset: (D.sunset[last] || '').slice(11, 16) }; });
+    localStorage.setItem('bcn.clim', JSON.stringify(climate)); render();
+  } catch (e) { /* offline */ }
+}
+const WMO = (c) => c == null ? ['', ''] : c === 0 ? ['☀️', 'בהיר'] : c <= 2 ? ['🌤️', 'מעונן חלקית'] : c === 3 ? ['☁️', 'מעונן'] : c <= 48 ? ['🌫️', 'ערפל'] : c <= 57 ? ['🌦️', 'טפטוף'] : c <= 67 ? ['🌧️', 'גשם'] : c <= 77 ? ['❄️', 'שלג'] : c <= 82 ? ['🌦️', 'ממטרים'] : ['⛈️', 'סופת רעמים'];
+const climOf = (date) => climate && climate[date.slice(5)];
+function wear(max, min, rain) {
+  const t = [];
+  if (min <= 7) t.push('מעיל חם, צעיף וכובע לערב'); else if (min <= 11) t.push('מעיל קל ושכבות, בערב מתקרר'); else t.push('ז׳קט קל או סווטשירט');
+  if (max >= 17) t.push('בצהריים נעים, אפשר להוריד שכבה');
+  if (rain >= 40) t.push('מטרייה קטנה ונעליים שלא נרטבות');
+  t.push('נעלי הליכה נוחות: הולכים הרבה');
+  return t;
 }
 async function loadRate() {
   try {
@@ -221,13 +252,13 @@ function hero(opts = {}) {
   </div>`;
 }
 const pageHead = (title, sub, back) => hero({ small: true, back }) + `<div class="head"><span class="eyebrow">${esc(sub)}</span><h1 class="pop">${esc(title)}</h1></div>`;
-const wx = (date) => weather && weather[date] ? `${weather[date].max}°/${weather[date].min}° · ${weather[date].rain}% גשם` : null;
+const wx = (date) => weather && weather[date] ? `${WMO(weather[date].code)[0]} ${weather[date].max}°/${weather[date].min}° · ${weather[date].rain}% גשם` : climOf(date) ? `ממוצע: ${climOf(date).max}°/${climOf(date).min}°` : null;
 
 /* ---------- recommendations: one registry so every suggestion opens the same place page ---------- */
 let REC = {}; try { REC = JSON.parse(sessionStorage.getItem('bcn.recs') || '{}'); } catch (e) { REC = {}; }
 function saveRecs() { try { sessionStorage.setItem('bcn.recs', JSON.stringify(REC)); } catch (e) { /* full */ } }
 const reg = (o) => { REC[o.id] = Object.assign(REC[o.id] || {}, o); return REC[o.id]; };
-const WHAT = { restaurant: 'מסעדה', cafe: 'בית קפה', fast_food: 'אוכל מהיר', ice_cream: 'גלידה', bar: 'בר', pub: 'פאב', biergarten: 'גן בירה', attraction: 'אטרקציה', museum: 'מוזיאון', viewpoint: 'תצפית', gallery: 'גלריה', monument: 'אנדרטה', castle: 'מבצר', church: 'כנסייה', palace: 'ארמון', archaeological_site: 'אתר ארכאולוגי', park: 'פארק', garden: 'גן', marketplace: 'שוק' };
+const WHAT = { clothes: 'בגדים', shoes: 'נעליים', department_store: 'כלבו', fashion_accessories: 'אקססוריז', restaurant: 'מסעדה', cafe: 'בית קפה', fast_food: 'אוכל מהיר', ice_cream: 'גלידה', bar: 'בר', pub: 'פאב', biergarten: 'גן בירה', attraction: 'אטרקציה', museum: 'מוזיאון', viewpoint: 'תצפית', gallery: 'גלריה', monument: 'אנדרטה', castle: 'מבצר', church: 'כנסייה', palace: 'ארמון', archaeological_site: 'אתר ארכאולוגי', park: 'פארק', garden: 'גן', marketplace: 'שוק' };
 const whatHe = (r) => WHAT[r.what] || (r.lang ? 'ערך בוויקיפדיה' : '') || r.note || '';
 const allStops = () => S.days.flatMap((d, di) => d.stops.map((st) => ({ st, di })));
 function sameSpot(a, b) {
@@ -275,10 +306,10 @@ function loadLive(cat, c) {
   if (cur && (cur.loading || Date.now() - cur.at < 1800e3)) return cur;
   try { const ss = JSON.parse(sessionStorage.getItem('bcn.live:' + k) || 'null'); if (ss && Date.now() - ss.at < 1800e3) { live[k] = ss; ss.items.forEach(reg); return ss; } } catch (e) { /* ignore */ }
   live[k] = { loading: true, at: Date.now(), items: [] };
-  (cat === 'wiki' ? Enrich.wikiNearby(c.lat, c.lng, 1000) : Enrich.nearby(cat, c.lat, c.lng, 900))
+  (cat === 'wiki' ? Enrich.wikiNearby(c.lat, c.lng, 1000) : Enrich.nearby(cat, c.lat, c.lng, cat === 'shop' ? 1500 : 900))
     .then((items) => { items.forEach(reg); saveRecs(); live[k] = { at: Date.now(), items }; try { sessionStorage.setItem('bcn.live:' + k, JSON.stringify(live[k])); } catch (e) { /* full */ } })
     .catch(() => { live[k] = { at: Date.now() - 1700e3, items: [], err: true }; })
-    .finally(() => { if (['#discover', '#today', ''].includes(location.hash)) render(); });
+    .finally(() => { if (['#discover', '#today', '', '#shopping'].includes(location.hash)) render(); });
   return live[k];
 }
 function recRow(x, n, opts = {}) {
@@ -437,7 +468,7 @@ function rerenderMapOverlay() {
 let discTab = 'food';
 let here = null;
 let discMode = 'live', liveCat = 'eat', liveAt = null, liveOpen = false;
-const LIVE_CATS = [['eat', 'לאכול', '#1E9E8F', 'food'], ['drink', 'לשתות', '#C2417F', 'bar'], ['see', 'לטייל ולראות', '#E8553D', 'view'], ['wiki', 'סיפורים סביב', '#2453C9', 'museum']];
+const LIVE_CATS = [['eat', 'לאכול', '#1E9E8F', 'food'], ['drink', 'לשתות', '#C2417F', 'bar'], ['see', 'לטייל ולראות', '#E8553D', 'view'], ['wiki', 'סיפורים סביב', '#2453C9', 'museum'], ['shop', 'קניות', '#D99400', 'shop']];
 function liveCenter() {
   if (liveAt === 'here' && here) return { lat: here.lat, lng: here.lng, name: 'המיקום שלך' };
   const all = allStops().map((o) => o.st);
@@ -709,7 +740,7 @@ V.more = () => { const H = S.hotel || {}; return pageHead('עוד דברים', '
   : `<button class="card row" style="border:2px dashed var(--line);cursor:pointer;text-align:right" data-act="hotelEdit"><span class="tile r1" style="--c:var(--navy)">${ic('hotel')}</span><div class="grow"><div style="font-weight:800">הוסף את המלון שלך</div><div class="muted">נשמר רק בטלפון הזה. משמש לניווט, למסך הנהג ולמסלול</div></div>${ic('plus')}</button>`}
   ${installCard()}
   <div class="grid2">
-    ${[['#places', 'list', 'המקומות', 'עריכה והעברה בין ימים', '#2453C9'], ['#expenses', 'coin', 'הוצאות', `€${Math.round(spent())} מתוך €${S.budget}`, '#E8553D'], ['#packing', 'bag', 'ציוד', `${packCount()}`, '#1E9E8F'], ['#flights', 'plane', 'טיסות', S.flights.back.time ? `חזרה ${S.flights.back.time}` : 'הוסף פרטי טיסה', '#13213D'], ['#transport', 'metro', 'תחבורה', 'מהשדה, כרטיסים, מטרו', '#2453C9'], ['#phrases', 'chat', 'ספרדית', 'משפטים עם השמעה', '#C2417F'], ['#shopping', 'tag', 'קניות', 'מבצעים והחזר מע״מ', '#D99400'], ['#emergency', 'sos', 'חירום', '112 · ביטוח · בית מרקחת', '#E8553D']]
+    ${[['#places', 'list', 'המקומות', 'עריכה והעברה בין ימים', '#2453C9'], ['#expenses', 'coin', 'הוצאות', `€${Math.round(spent())} מתוך €${S.budget}`, '#E8553D'], ['#packing', 'bag', 'ציוד', `${packCount()}`, '#1E9E8F'], ['#flights', 'plane', 'טיסות', S.flights.back.time ? `חזרה ${S.flights.back.time}` : 'הוסף פרטי טיסה', '#13213D'], ['#transport', 'metro', 'תחבורה', 'מהשדה, כרטיסים, מטרו', '#2453C9'], ['#phrases', 'chat', 'ספרדית', 'משפטים עם השמעה', '#C2417F'], ['#shopping', 'tag', 'קניות', S.wish && S.wish.length ? `${S.wish.length} ברשימה` : 'רשימה, מחירים, חנויות', '#D99400'], ['#weather', 'sun', 'מזג אוויר', weather ? 'תחזית לימי הטיול' : 'ממוצע ושקיעות', '#2453C9'], ['#emergency', 'sos', 'חירום', '112 · ביטוח · בית מרקחת', '#E8553D']]
       .map(([h, k, t, s, c]) => `<a class="big" href="${h}" style="--c:${c}"><span class="ic">${ic(k)}</span><span style="display:flex;flex-direction:column"><b>${t}</b><span>${esc(s)}</span></span></a>`).join('')}
   </div><div class="muted" style="text-align:center;padding:8px 0">גרסה ${VERSION}</div></div>`; };
 
@@ -747,11 +778,75 @@ V.transport = () => guide('תחבורה', 'מחירים לפי מקורות מ־
   ['walk', '#1E9E8F', 'ברגל', ['רוב המסלול שלך במרחק הליכה', 'מעל 20 דקות הליכה האפליקציה ממליצה על מטרו']],
   ['warn', '#D99400', 'שימו לב', ['כייסים ברמבלס ובמטרו: תיק קדימה, טלפון בכיס פנימי', 'בלילה עדיף מונית או אפליקציית מוניות']]
 ]) + `<div class="section"><span class="muted">מקורות: <a href="https://static-web.tmb.cat/en/barcelona-fares-metro-bus" target="_blank" rel="noopener">TMB</a> · <a href="https://barcelonasecreta.com/en/prices-public-transport-fares-barcelona-2026/" target="_blank" rel="noopener">Barcelona Secreta</a> · <a href="https://aerobusbarcelona.es/en/faqs/" target="_blank" rel="noopener">Aerobús</a></span></div>`;
-V.shopping = () => pageHead('קניות', 'מבצעים והחזר מע״מ', '#more') + `<div class="section">
+/* weather */
+V.weather = () => {
+  const have = !!weather; const dtf = daysToFlight();
+  return pageHead('מזג אוויר', have ? 'תחזית לימי הטיול' : 'ממוצע 10 השנים האחרונות לאותם תאריכים', '#more') + `<div class="section">
+  ${have ? '' : `<div class="warn" style="background:#EEF2FA;color:var(--navy)">${ic('warn')}<span>התחזית האמיתית נפתחת כ־16 יום לפני הטיול${dtf > 16 ? `, בעוד ${dtf - 16} ימים` : ''}. עד אז מוצג מה שהיה בממוצע ב־13–17 בדצמבר בשנים האחרונות.</span></div>`}
+  ${META.map((m, k) => {
+    const f = weather && weather[m.date]; const c = climOf(m.date);
+    const mx = f ? f.max : c && c.max, mn = f ? f.min : c && c.min, rain = f ? f.rain : c ? c.rainy : 0;
+    const [emo, desc] = f ? WMO(f.code) : ['', 'ממוצע'];
+    const sunset = (f && f.sunset) || (c && c.sunset); const sunrise = (f && f.sunrise) || (c && c.sunrise);
+    const view = S.days[k].stops.find((s) => s.kind === 'view');
+    return `<div class="card pop" style="display:flex;flex-direction:column;gap:8px;border-top:5px solid ${m.color}">
+      <div class="row"><div class="grow"><div style="font-weight:800">${m.short} ${m.num}.12 · ${esc(m.title)}</div><div class="muted">${desc}${f ? ` · רוח עד ${f.wind} קמ״ש` : c ? ` · לפי ${c.years} שנים` : ''}</div></div>
+      ${mx != null ? `<div style="text-align:left"><div style="font:700 34px var(--display);line-height:.9">${emo} ${mx}°</div><div class="muted">לילה ${mn}°</div></div>` : '<span class="muted">טוען…</span>'}</div>
+      ${mx != null ? `<div class="row" style="gap:6px;flex-wrap:wrap"><span class="badge" style="color:${rain >= 40 ? 'var(--red)' : 'var(--teal)'}">${f ? `${rain}% סיכוי לגשם` : `גשם ב־${rain}% מהשנים`}</span>${sunrise ? `<span class="badge">זריחה ${sunrise}</span>` : ''}${sunset ? `<span class="badge" style="color:#8A4B00">שקיעה ${sunset}</span>` : ''}</div>` : ''}
+      ${f && f.hours && f.hours.length ? `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">${f.hours.map((h) => `<div style="flex:none;text-align:center;background:#F3F5FA;border-radius:12px;padding:6px 8px;min-width:48px"><div class="muted">${String(h.h).padStart(2, '0')}:00</div><div>${WMO(h.c)[0]}</div><div style="font-weight:800">${h.t}°</div>${h.p >= 20 ? `<div style="font-size:11px;color:var(--blue)">${h.p}%</div>` : ''}</div>`).join('')}</div>` : ''}
+      ${mx != null ? `<div style="font-size:14px">${wear(mx, mn, rain).map((t) => '• ' + t).join('<br>')}</div>` : ''}
+      ${sunset && view ? `<div class="warn" style="display:block;background:#FFF4D6"><b>שקיעה ב־${sunset}:</b> ביום הזה יש תצפית (${esc(view.name)}). כדאי להגיע אליה כחצי שעה לפני.</div>` : ''}
+      ${f && f.rain >= 60 && S.days[k].stops.some((s) => ['park', 'view'].includes(s.kind)) ? `<div class="warn">${ic('warn')}<span>צפוי גשם, וביום הזה יש מקומות בחוץ. אפשר להחליף ימים בעריכת המקומות.</span></div>` : ''}
+    </div>`;
+  }).join('')}
+  ${(() => { const rainy = META.some((m) => { const f = weather && weather[m.date]; const c = climOf(m.date); return f ? f.rain >= 40 : c && c.rainy >= 25; }); const hasUmb = S.packing.some((g) => g.items.some((x) => /מטרי/.test(x.t))); return rainy && !hasUmb ? `<button class="btn sun" data-act="addUmbrella">${ic('plus')}הוסף מטרייה לרשימת הציוד</button>` : ''; })()}
+  <span class="muted">תחזית: Open-Meteo. ממוצעים: ארכיון Open-Meteo, 2015–2025.</span></div>`;
+};
+
+/* shopping */
+const BRANDS = ['Zara', 'Mango', 'Uniqlo', 'Pull&Bear', 'Massimo Dutti', 'Bershka', 'H&M', 'אחר'];
+const REFUND = 0.13; // tax free: about 13% back after fees (conservative)
+function wishCalc(w) {
+  const r = rate ? rate.v : 3.9; if (!w.es) return null;
+  const esIls = w.es * r; const net = esIls * (1 - REFUND);
+  return { esIls, net, save: w.il ? w.il - net : null };
+}
+let shopDay = null;
+V.shopping = () => {
+  if (!S.wish) S.wish = [];
+  const shopIdx = S.days.map((d, k) => k).filter((k) => S.days[k].stops.some((x) => x.kind === 'shop'));
+  const di = shopDay ?? shopIdx.find((k) => dow(META[k].date) !== 0) ?? shopIdx[0] ?? curIdx();
+  const c = S.days[di].stops.find((s) => s.kind === 'shop' && hasGeo(s)) || S.days[di].stops.find((s) => hasGeo(s) && !s.hotelRef);
+  const res = c && window.Enrich ? loadLive('shop', c) : null;
+  const rows = res && res.items ? rankRecs(res.items, c) : [];
+  const total = S.wish.reduce((a, w) => { const k = wishCalc(w); return a + (k && k.save ? k.save : 0); }, 0);
+  return pageHead('קניות', 'רשימת קניות, מחירים, חנויות ומבצעים', '#more') + `<div class="section">
+  <div class="row"><h2 class="grow">רשימת הקניות שלי</h2><button class="btn sun sm" data-act="wishAdd">${ic('plus')}פריט</button></div>
+  ${S.wish.length ? S.wish.map((w) => { const k = wishCalc(w); const down = w.prev && w.es < w.prev; const up = w.prev && w.es > w.prev;
+    return `<div class="card pop" style="display:flex;flex-direction:column;gap:6px;${w.bought ? 'opacity:.6' : ''}">
+      <div class="row"><div class="grow"><div style="font-size:11px;font-weight:800;color:var(--pink)">${esc(w.brand || '')}</div><div style="font-weight:800;font-size:16px">${w.bought ? '✓ ' : ''}${esc(w.name)}</div>
+      <div class="muted">${w.es ? `בספרד €${w.es}` : 'אין עדיין מחיר בספרד'}${down ? ` <span class="badge" style="color:var(--teal)">ירד מ־€${w.prev}</span>` : up ? ` <span class="badge" style="color:var(--red)">עלה מ־€${w.prev}</span>` : ''}${w.il ? ` · בארץ ₪${w.il}` : ''}</div></div>
+      <button class="icon-btn" data-act="wishEdit" data-id="${w.id}" aria-label="עריכה">${ic('pen')}</button></div>
+      ${k ? `<div style="font-size:14px">אחרי החזר מע״מ: <b>₪${Math.round(k.net)}</b>${k.save != null ? ` · ${k.save > 0 ? `<b style="color:var(--teal)">חוסך ₪${Math.round(k.save)} מול הארץ</b>` : `<b style="color:var(--red)">יקר ב־₪${Math.round(-k.save)} מהארץ</b>`}` : ''}</div>` : ''}
+      <div class="row">${w.url ? `<a class="btn soft sm grow" href="${esc(w.url)}" target="_blank" rel="noopener">${ic('link')}בדוק מחיר באתר</a>` : ''}<button class="btn soft sm grow" data-act="wishPrice" data-id="${w.id}">עדכן מחיר</button><button class="btn ${w.bought ? 'navy' : 'sun'} sm grow" data-act="wishBought" data-id="${w.id}">${w.bought ? 'בוטל: לא קניתי' : 'קניתי'}</button></div></div>`; }).join('')
+    : '<div class="card muted">הוסף פריטים שאתה רוצה לקנות, עם מחיר בארץ ומחיר באתר הספרדי. האפליקציה תחשב אם משתלם, תעקוב אחרי שינויי מחיר שתעדכן, ותכניס להוצאות כשתקנה.</div>'}
+  ${total > 0 ? `<div class="card" style="background:#E6F6F3"><b>סה״כ חיסכון צפוי ברשימה: ₪${Math.round(total)}</b><div class="muted">לפי שער ${rate ? rate.v.toFixed(2) : '≈3.9'} והחזר מע״מ של כ־13%</div></div>` : ''}
+
+  <h2>חנויות ליד המסלול</h2>
+  <div class="pills">${META.map((m, k) => `<button class="pill ${k === di ? 'on' : ''}" style="--c:${m.color}" data-act="shopDay" data-i="${k}">${m.short} ${m.num}</button>`).join('')}</div>
+  ${!c ? '<div class="card muted">אין מקומות עם מיקום ביום הזה.</div>' : res && res.loading ? '<div class="card muted">מחפש חנויות…</div>' : res && res.err ? '<div class="card muted">החיפוש החי לא זמין כרגע (צריך אינטרנט).</div>' : rows.length ? rows.slice(0, 12).map((x, n) => recRow(x, n, { color: '#D99400', why: `${x.r.brand || whatHe(x.r)}` })).join('') : '<div class="card muted">לא מצאתי חנויות רשת בטווח של כקילומטר וחצי.</div>'}
+  ${c ? `<span class="muted">סביב ${esc(c.name)} · חנויות רשת מ־OpenStreetMap, עם סימון פתוח או סגור עכשיו</span>` : ''}
+  ${dow(META[di].date) === 0 ? `<div class="warn">${ic('warn')}<span>ביום ראשון רוב החנויות סגורות.</span></div>` : ''}
+
+  <h2>מתי יש מבצעים</h2>
+  <div class="card" style="display:flex;flex-direction:column;gap:6px;font-size:14px">
+    <div><b>בלאק פריידי, 27.11.2026:</b> לפני הטיול. כדאי לבדוק את הרשימה באתרים הספרדיים, ולעדכן כאן את המחירים.</div>
+    <div><b>13–17.12:</b> בדרך כלל אין מבצע כללי, רק מבצעי חג נקודתיים.</div>
+    <div><b>Rebajas, מ־7.1:</b> עונת המבצעים הגדולה, אחרי הטיול.</div></div>
   <div class="next" style="margin:0;background:var(--sun);color:var(--navy)"><div style="font-family:var(--display);font-size:32px;line-height:.9">החזר מע״מ = ההנחה הכי בטוחה</div><div style="font-size:14px">המע״מ על בגדים בספרד הוא 21%, ולתיירים מחוץ לאיחוד אין סכום מינימום. בקשו בקופה טופס tax free (מראים דרכון), ובשדה, לפני הבידוק, מאשרים אותו במכונת DIVA. אחרי עמלות חוזרים בדרך כלל 13%–16% מהמחיר.</div></div>
-  <div class="warn">${ic('warn')}<span>עונת המבצעים הגדולה (Rebajas) מתחילה בדרך כלל ב־7 בינואר, אחרי הטיול. בדצמבר יש בעיקר מבצעים נקודתיים.</span></div>
   <div class="grid2">${[['ZARA', 'https://www.zara.com/es/', '#13213D'], ['MANGO', 'https://shop.mango.com/es', '#E8553D'], ['UNIQLO', 'https://www.uniqlo.com/es/es/', '#E8553D'], ['Pull&Bear', 'https://www.pullandbear.com/es/', '#2453C9']].map(([n, u, c]) => `<a class="card" href="${u}" target="_blank" rel="noopener" style="text-decoration:none;display:flex;flex-direction:column;gap:6px"><b style="font-family:var(--display);font-size:30px;line-height:.9;color:${c}">${esc(n)}</b><span class="muted">לאתר הספרדי ←</span></a>`).join('')}</div>
-  <span class="muted">ניטור אוטומטי של מבצעים יתווסף בהמשך, בניסיון.</span></div>`;
+  <span class="muted">אתרי החברות לא מאפשרים לאפליקציות לקרוא מחירים, ולכן את המחיר מעדכנים בלחיצה, והאפליקציה עוקבת אחרי השינוי.</span></div>`;
+};
 V.phrases = () => pageHead('ספרדית לדרך', 'לחץ כדי לשמוע', '#more') + `<div class="section">${T.phrases.map(([g, list]) => `<h2>${g}</h2>${list.map(([es, tr, he], k) => `<div class="card row"><div class="grow"><div class="muted">${esc(he)}</div><div dir="ltr" style="font-weight:800;font-size:17px;text-align:right">${esc(es)}</div><div style="font-size:12px;font-weight:700;color:var(--pink)">${esc(tr)}</div></div><button class="icon-btn ${ROT[k % 4]}" style="background:var(--pink);color:#fff;width:44px;height:44px" data-act="say" data-t="${esc(es)}" aria-label="השמעה">${ic('speaker')}</button></div>`).join('')}`).join('')}</div>`;
 V.emergency = () => pageHead('חירום', 'הכול במסך אחד, גם בלי אינטרנט', '#more') + `<div class="section">
   <a class="btn" href="tel:112" style="background:var(--red);color:#fff;font-size:22px;padding:16px">חיוג 112</a>
@@ -853,6 +948,28 @@ const A = {
   reEnrich: (e) => { const s = [...S.days.flatMap((d) => d.stops), ...S.saved].find((x) => x.id === e.dataset.id); if (!s) return; delete s.details; retried.delete(s.id); enrichStop(s, true); render(); toast('מחפש מידע…'); },
   lightbox: (e) => openLightbox(+e.dataset.i),
   discMode: (e) => { discMode = e.dataset.t; render(); },
+  shopDay: (e) => { shopDay = +e.dataset.i; render(); },
+  addUmbrella: () => { const g = S.packing.find((x) => /בגד|ביגוד|לבוש/.test(x.group)) || S.packing[0]; g.items.push({ id: uid(), t: 'מטרייה קטנה', done: false }); save(); render(); toast('נוספה לרשימת הציוד'); },
+  wishAdd: () => wishSheet(null),
+  wishEdit: (e) => wishSheet(S.wish.find((w) => w.id === e.dataset.id)),
+  wishSave: (e) => {
+    const name = $('#ws-name').value.trim(); if (!name) { toast('צריך שם לפריט'); return; }
+    const num = (id) => { const v = parseFloat(($(id).value || '').replace(',', '.')); return isNaN(v) ? null : v; };
+    let w = S.wish.find((x) => x.id === e.dataset.id);
+    if (!w) { w = { id: uid(), bought: false }; S.wish.push(w); }
+    const es = num('#ws-es'); if (w.es != null && es != null && es !== w.es) w.prev = w.es;
+    Object.assign(w, { name, brand: $('#ws-brand').value, url: $('#ws-url').value.trim(), il: num('#ws-il'), es });
+    save(); closeSheet(); render(); toast('נשמר');
+  },
+  wishDel: (e) => { const w = S.wish.find((x) => x.id === e.dataset.id); if (w && w.expId) S.expenses = S.expenses.filter((x) => x.id !== w.expId); S.wish = S.wish.filter((x) => x.id !== e.dataset.id); save(); closeSheet(); render(); toast('נמחק'); },
+  wishPrice: (e) => { const w = S.wish.find((x) => x.id === e.dataset.id); sheet(`<h3>מחיר עדכני</h3><span class="muted">${esc(w.name)}${w.es ? ` · היה €${w.es}` : ''}</span><label class="lab">מחיר באתר הספרדי (€)<input class="field" id="wp-es" inputmode="decimal" value="${w.es ?? ''}"></label>${w.url ? `<a class="btn soft sm" href="${esc(w.url)}" target="_blank" rel="noopener">${ic('link')}פתח את המוצר</a>` : ''}<button class="btn sun" data-act="wishPriceSave" data-id="${w.id}">שמירה</button>`); },
+  wishPriceSave: (e) => { const w = S.wish.find((x) => x.id === e.dataset.id); const v = parseFloat(($('#wp-es').value || '').replace(',', '.')); if (isNaN(v)) { toast('צריך מספר'); return; } if (w.es != null && v !== w.es) w.prev = w.es; w.es = v; w.checked = Date.now(); save(); closeSheet(); render(); toast(w.prev && v < w.prev ? `ירד ב־€${(w.prev - v).toFixed(2)}!` : 'עודכן'); },
+  wishBought: (e) => {
+    const w = S.wish.find((x) => x.id === e.dataset.id); w.bought = !w.bought;
+    if (w.bought && w.es) { const m = META[curIdx()]; const ex = { id: uid(), title: `${w.brand && w.brand !== 'אחר' ? w.brand + ' · ' : ''}${w.name}`, amount: w.es, cur: 'EUR', cat: 'קניות', day: `${m.short} ${m.num}.12` }; S.expenses.push(ex); w.expId = ex.id; toast('נכנס להוצאות · אל תשכח טופס tax free'); }
+    else if (!w.bought && w.expId) { S.expenses = S.expenses.filter((x) => x.id !== w.expId); delete w.expId; toast('הוסר מההוצאות'); }
+    save(); render();
+  },
   liveCat: (e) => { liveCat = e.dataset.t; render(); },
   liveOpen: () => { liveOpen = !liveOpen; render(); },
   liveRetry: () => { const c = liveCenter(); delete live[liveKey(liveCat, c)]; try { sessionStorage.removeItem('bcn.live:' + liveKey(liveCat, c)); } catch (e) { /* ignore */ } render(); },
@@ -991,6 +1108,15 @@ const A = {
   insSave: () => { S.insurance = { policy: $('#ins-policy').value.trim(), phone: $('#ins-phone').value.trim() }; save(); render(); toast('נשמר'); },
   flSave: () => { ['out', 'back'].forEach((k) => { S.flights[k] = { no: $(`#fl-${k}-no`).value.trim(), term: $(`#fl-${k}-term`).value.trim(), date: $(`#fl-${k}-date`).value, time: $(`#fl-${k}-time`).value }; }); save(); render(); toast('נשמר'); }
 };
+function wishSheet(w) {
+  w = w || {};
+  sheet(`<h3>${w.id ? 'עריכת פריט' : 'פריט לקנייה'}</h3>
+    <label class="lab">מה<input class="field" id="ws-name" value="${esc(w.name || '')}" placeholder="למשל: מעיל צמר שחור"></label>
+    <label class="lab">מותג<select class="field" id="ws-brand">${BRANDS.map((b) => `<option ${w.brand === b ? 'selected' : ''}>${b}</option>`).join('')}</select></label>
+    <label class="lab">קישור למוצר באתר הספרדי<input class="field" id="ws-url" type="url" value="${esc(w.url || '')}" style="direction:ltr;text-align:left" placeholder="https://www.zara.com/es/…"></label>
+    <div class="grid2"><label class="lab">מחיר בארץ (₪)<input class="field" id="ws-il" inputmode="decimal" value="${w.il ?? ''}"></label><label class="lab">מחיר בספרד (€)<input class="field" id="ws-es" inputmode="decimal" value="${w.es ?? ''}"></label></div>
+    <div class="row"><button class="btn sun grow" data-act="wishSave" data-id="${w.id || ''}">שמירה</button>${w.id ? `<button class="btn soft" style="color:var(--red)" data-act="wishDel" data-id="${w.id}">מחיקה</button>` : ''}</div>`);
+}
 function daySheet(cb) {
   sheet(`<h3>לאיזה יום?</h3><div style="display:flex;flex-direction:column;gap:8px">${META.map((m, k) => `<button class="btn" style="background:${m.color};color:#fff;justify-content:flex-start" data-act="daySheetPick" data-i="${k}">${m.short} ${m.num}.12 · ${esc(m.title)}</button>`).join('')}</div><button class="btn soft" data-act="closeSheet">ביטול</button>`);
   sheetCtx = { kind: 'day', cb };
