@@ -38,7 +38,9 @@ const P = {
   warn: '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v.5"/>',
   locate: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
   plus: '<path d="M12 5v14M5 12h14"/>', check: '<path d="M5 12l5 5 9-10"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>',
-  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  museum: '<path d="M3 21h18M4 10h16M12 3l9 5H3zM6 10v8M10 10v8M14 10v8M18 10v8"/>',
+  church: '<path d="M12 2v4M10 4h4M7 21V10l5-4 5 4v11M3 21v-6l4-3M21 21v-6l-4-3M2 21h20M10.5 21v-4a1.5 1.5 0 0 1 3 0v4"/>'
 };
 const ic = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true">${P[k] || P.star}</svg>`;
 const ROT = ['r1', 'r2', 'r3', 'r4'];
@@ -74,7 +76,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '6 · 11.11';
+const VERSION = '7 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -90,14 +92,18 @@ const dow = (date) => new Date(date + 'T12:00:00').getDay();
 function todayIdx() { const t = new Date(); const iso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; return META.findIndex((d) => d.date === iso); }
 function curIdx() { const t = todayIdx(); return S.dayIdx != null ? S.dayIdx : (t >= 0 ? t : 0); }
 function daysToFlight() { const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((new Date(2026, 11, 13) - t) / 864e5); }
-function closedNote(stop, date) { const r = stop.rule && T.rules[stop.rule]; return r && r.closed.includes(dow(date)) ? r.text : ''; }
+function closedDays(stop) { const r = stop.rule && T.rules[stop.rule]; if (r) return r.closed; const h = stop.details && stop.details.hours; return h && h.closed ? h.closed : []; }
+function closedNote(stop, date) {
+  const r = stop.rule && T.rules[stop.rule]; if (r) return r.closed.includes(dow(date)) ? r.text : '';
+  return closedDays(stop).includes(dow(date)) ? 'לפי OpenStreetMap המקום סגור ביום הזה' : '';
+}
 function infoNote(stop, date) { const n = stop.info && T.infos && T.infos[stop.info]; return n && !n.days.includes(dow(date)) ? n.text : ''; }
-function hoursOf(stop) { const r = stop.rule && T.rules[stop.rule]; return r && r.hours ? r.hours : ''; }
+function hoursOf(stop) { const r = stop.rule && T.rules[stop.rule]; if (r && r.hours) return r.hours; const h = stop.details && stop.details.hours; return h ? h.text : ''; }
 // The open day whose stops are closest to this one: where it fits best on the map.
 function suggestDay(stop, from) {
-  const r = stop.rule && T.rules[stop.rule]; let best = null, bestD = Infinity;
+  const cd = closedDays(stop); let best = null, bestD = Infinity;
   META.forEach((m, k) => {
-    if (k === from || (r && r.closed.includes(dow(m.date)))) return;
+    if (k === from || cd.includes(dow(m.date))) return;
     const geo = S.days[k].stops.filter((x) => hasGeo(x) && x.id !== stop.id);
     const d = hasGeo(stop) && geo.length ? Math.min(...geo.map((x) => km(stop, x))) : 99;
     if (d < bestD) { bestD = d; best = k; }
@@ -134,26 +140,49 @@ async function loadRate() {
     if (j.rates && j.rates.ILS) { rate = { v: j.rates.ILS, date: j.date, at: Date.now() }; localStorage.setItem('bcn.rate', JSON.stringify(rate)); render(); }
   } catch (e) { const c = JSON.parse(localStorage.getItem('bcn.rate') || 'null'); if (c) rate = c; }
 }
-const wiki = {};
-async function loadWiki(en) {
-  if (wiki[en]) return wiki[en];
-  const out = { title: '', text: '', img: [], url: '' };
+/* place details: OpenStreetMap + Wikipedia (see enrich.js) */
+const articles = {}; const articleLoading = {};
+function wikiRefOf(s) {
+  if (s.details && s.details.wiki) return s.details.wiki;
+  if (s.wiki) return { lang: 'en', title: decodeURIComponent(s.wiki).replace(/_/g, ' '), needsHe: true };
+  return null;
+}
+function articleFor(s) {
+  const ref = wikiRefOf(s); if (!ref || !window.Enrich) return null;
+  const key = ref.lang + ':' + ref.title;
+  if (articles[key]) return articles[key];
+  if (!articleLoading[key]) {
+    articleLoading[key] = (async () => {
+      let r = ref; if (ref.needsHe) r = (await Enrich.toHeOrEn('en', ref.title)) || ref;
+      articles[key] = await Enrich.wikiArticle(r);
+    })().catch(() => { articles[key] = { err: true }; }).finally(() => { if (location.hash.startsWith('#place/')) render(); });
+  }
+  return 'loading';
+}
+const enriching = new Set();
+async function enrichStop(stop, force) {
+  if (!window.Enrich || enriching.has(stop.id) || stop.hotelRef) return;
+  if (!force && stop.details && Date.now() - stop.details.at < (stop.details.partial ? 3600e3 : 7 * 864e5)) return;
+  if (!hasGeo(stop) && !stop.osm) return;
+  enriching.add(stop.id);
   try {
-    const ll = await (await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${en}&prop=langlinks&lllang=he&format=json&origin=*`)).json();
-    const pg = Object.values(ll.query.pages)[0]; const he = pg.langlinks && pg.langlinks[0] && pg.langlinks[0]['*'];
-    const lang = he ? 'he' : 'en'; const title = he ? encodeURIComponent(he.replace(/ /g, '_')) : en;
-    const sum = await (await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${title}`)).json();
-    out.title = sum.title; out.text = sum.extract || ''; out.url = sum.content_urls && sum.content_urls.mobile.page; out.lang = lang;
-    const media = await (await fetch(`https://en.wikipedia.org/api/rest_v1/page/media-list/${en}`)).json();
-    out.img = (media.items || []).filter((m) => m.type === 'image' && m.srcset && m.srcset[0]).slice(0, 8).map((m) => 'https:' + m.srcset[0].src);
-    if (!out.img.length && sum.thumbnail) out.img = [sum.thumbnail.source];
-  } catch (e) { out.err = true; }
-  wiki[en] = out; return out;
+    const d = await Enrich.details(stop);
+    stop.details = d; if (d.osm && !stop.osm) stop.osm = d.osm;
+    if ((!stop.kind || stop.kind === 'star') && d.kind) stop.kind = d.kind;
+    save();
+    const h = location.hash;
+    if (h.startsWith('#place/') || h === '#today' || h === '' || h === '#places') render();
+  } catch (e) { /* offline or rate limited: try again later */ } finally { enriching.delete(stop.id); }
+}
+function enrichAllSlowly() {
+  if (!navigator.onLine) return;
+  const todo = []; S.days.forEach((d) => d.stops.forEach((s) => { if (!s.hotelRef && (hasGeo(s) || s.osm) && (!s.details || Date.now() - s.details.at > (s.details.partial ? 3600e3 : 7 * 864e5))) todo.push(s); }));
+  let k = 0; const step = () => { if (k >= todo.length) return; enrichStop(todo[k++]).finally(() => setTimeout(step, 1500)); }; step();
 }
 async function searchPlaces(text) {
   const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&lat=41.39&lon=2.17&limit=6`);
   const j = await r.json();
-  return (j.features || []).map((f) => ({ name: f.properties.name || text, sub: [f.properties.street, f.properties.housenumber, f.properties.city].filter(Boolean).join(' '), lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }));
+  return (j.features || []).map((f) => ({ name: f.properties.name || text, sub: [f.properties.street, f.properties.housenumber, f.properties.city].filter(Boolean).join(' '), lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], osm: f.properties.osm_id ? { type: f.properties.osm_type, id: f.properties.osm_id } : null, kind: window.Enrich ? Enrich.kindFrom(f.properties.osm_key, f.properties.osm_value) : null }));
 }
 
 /* ---------- shared pieces ---------- */
@@ -341,13 +370,13 @@ V.place = (di, id) => {
   if (!s) return pageHead('לא נמצא', '', '#today');
   setDayColor(di);
   const cn = closedNote(s, m.date);
-  const w = s.wiki && wiki[s.wiki];
-  if (s.wiki && !w) loadWiki(s.wiki).then(() => { if (location.hash.startsWith('#place/')) render(); });
+  const w = articleFor(s);
+  if (!s.details && !s.hotelRef) enrichStop(s);
   return pageHead(s.name, `יום ${m.short} ${m.num}.12 · ${s.note || ''}`, '#today') + `<div class="section">
     ${cn ? (() => { const to = suggestDay(s, di); return `<div class="warn">${ic('warn')}<span class="grow">${cn}.${to != null ? `<br><button class="btn sun sm" style="margin-top:6px" data-act="moveTo" data-d="${di}" data-id="${s.id}" data-to="${to}">להעביר ליום ${META[to].short} ${META[to].num}.12</button>` : ''}</span></div>`; })() : ''}
     ${infoNote(s, m.date) ? `<div class="warn" style="background:#EEF2FA;color:var(--navy)">${ic('warn')}<span>${infoNote(s, m.date)}.</span></div>` : ''}
-    ${hoursOf(s) ? `<div class="card row" style="padding:10px 12px"><span class="muted grow">שעות פתיחה</span><b style="font-size:13px">${esc(hoursOf(s))}</b></div>` : ''}
-    ${w && w.img.length ? `<div class="gallery">${w.img.map((u) => `<img src="${esc(u)}" alt="" loading="lazy">`).join('')}</div>` : ''}
+    ${w && w.images && w.images.length ? `<div class="gallery">${w.images.map((u) => `<img src="${esc(u)}" alt="" loading="lazy">`).join('')}</div>` : ''}
+    ${infoCard(s)}
     ${storyHTML(s, w)}
     ${hasGeo(s) && s.kind !== 'food' ? `<h2>טבעוני וללא גלוטן קרוב</h2>${nearest(T.discover.food, s, 3).map((f) => `<div class="card row"><span class="tile" style="--c:var(--teal)">${ic('food')}</span><div class="grow"><div style="font-weight:800">${esc(f.name)}</div><div class="muted">${fmtKm(f.dist)} · ${esc(f.note)}</div></div><a class="icon-btn" href="${gmDir(s, f, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('pin')}</a></div>`).join('')}` : ''}
     <span class="muted" style="font-weight:800">איך מגיעים? בחר ונפתח ב־Google Maps</span>
@@ -356,12 +385,37 @@ V.place = (di, id) => {
   </div>`;
 };
 
+const dietWord = (v, what) => ({ only: `${what} לגמרי`, yes: what, limited: `יש אפשרויות (${what})`, no: `לא ${what}` }[v] || '');
+function infoCard(s) {
+  const d = s.details || {}; const rows = [];
+  const h = hoursOf(s); if (h) rows.push(['שעות פתיחה', esc(h)]);
+  if (d.vegan) rows.push(['טבעוני', esc(dietWord(d.vegan, 'טבעוני'))]);
+  if (d.gf) rows.push(['ללא גלוטן', esc(dietWord(d.gf, 'ללא גלוטן'))]);
+  if (d.cuisine) rows.push(['מטבח', esc(d.cuisine.replace(/;/g, ', '))]);
+  if (d.website) rows.push(['אתר', `<a href="${esc(d.website)}" target="_blank" rel="noopener" dir="ltr">${esc(d.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a>`]);
+  if (d.phone) rows.push(['טלפון', `<a href="tel:${esc(d.phone.replace(/\s/g, ''))}" dir="ltr">${esc(d.phone)}</a>`]);
+  const pending = enriching.has(s.id);
+  if (!rows.length && !pending) return '';
+  return `<div class="card" style="display:flex;flex-direction:column;gap:8px"><h2>פרטים</h2>
+    ${rows.map(([k, v]) => `<div class="row" style="align-items:flex-start"><span class="muted" style="min-width:76px">${k}</span><span class="grow" style="font-size:14px;font-weight:600">${v}</span></div>`).join('')}
+    ${pending ? '<span class="muted">מחפש עוד פרטים על המקום…</span>' : ''}
+    ${d.hours && !(s.rule && T.rules[s.rule]) ? '<span class="muted">שעות לפי OpenStreetMap. כדאי לוודא לפני שהולכים.</span>' : ''}</div>`;
+}
+const paras = (t) => t.split(/\n+/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p)}</p>`).join('');
 function storyHTML(s, w) {
   const st = s.story && window.STORIES && window.STORIES[s.story];
-  const wikiPart = s.wiki ? (w ? (w.text ? `<p>${esc(w.text)}</p><a class="muted" href="${esc(w.url)}" target="_blank" rel="noopener">הערך המלא בוויקיפדיה${w.lang === 'en' ? ' (באנגלית)' : ''} ←</a>` : '') : '<p class="muted">טוען מוויקיפדיה…</p>') : '';
-  if (!st) return `<div class="card story"><h2 style="margin-bottom:8px">הסיפור</h2>${wikiPart || '<p class="muted">עוד אין סיפור למקום הזה.</p>'}</div>`;
+  let wikiPart = '';
+  if (w === 'loading') wikiPart = '<p class="muted">טוען מוויקיפדיה…</p>';
+  else if (w && !w.err && w.intro) {
+    wikiPart = `${paras(w.intro)}
+      ${w.sections.map((x) => `<details style="margin:6px 0;border-top:1px solid var(--line);padding-top:8px"><summary style="font-weight:800;cursor:pointer">${esc(x.title)}</summary><div style="margin-top:8px">${paras(x.body)}</div></details>`).join('')}
+      <a class="muted" href="${esc(w.url)}" target="_blank" rel="noopener">הערך המלא בוויקיפדיה${w.lang === 'en' ? ' (באנגלית)' : ''} ←</a>`;
+  }
+  const speakBtn = (lang) => `<button class="btn soft sm" data-act="speak" data-lang="${lang}">${ic('speaker')}הקרא לי</button>`;
+  const wikiCard = wikiPart ? `<div class="card story" ${st ? '' : 'id="story-text"'}><div class="row" style="margin-bottom:8px"><h2 class="grow">${st ? 'מוויקיפדיה' : 'על המקום'}</h2>${!st && w && w.intro ? speakBtn(w.lang === 'he' ? 'he-IL' : 'en-US') : ''}</div>${wikiPart}</div>` : '';
+  if (!st) return wikiCard || (s.details || enriching.has(s.id) ? '' : '<div class="card story"><h2 style="margin-bottom:8px">על המקום</h2><p class="muted">לא מצאתי מידע על המקום. אפשר לבקש ממני לכתוב לו סיפור.</p></div>');
   return `<div class="card story" id="story-text">
-    <div class="row" style="margin-bottom:8px"><h2 class="grow">הסיפור</h2><button class="btn soft sm" data-act="speak" data-lang="he-IL">${ic('speaker')}הקרא לי</button></div>
+    <div class="row" style="margin-bottom:8px"><h2 class="grow">הסיפור</h2>${speakBtn('he-IL')}</div>
     <p>${esc(st.intro)}</p>
     <h2 style="margin:6px 0 8px">ציר זמן</h2>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">${st.timeline.map(([when, what]) => `<div class="row" style="align-items:flex-start"><span class="badge" style="color:var(--day);flex:none;min-width:64px;text-align:center">${esc(when)}</span><span style="font-size:14px;line-height:1.5">${esc(what)}</span></div>`).join('')}</div>
@@ -370,7 +424,7 @@ function storyHTML(s, w) {
     <div class="warn" style="display:block;background:#EEF2FA;color:var(--navy);margin:10px 0"><b>הידעת?</b> ${esc(st.fact)}</div>
     <div class="warn" style="display:block;margin-bottom:10px"><b>טיפ:</b> ${esc(st.tip)}</div>
   </div>
-  ${wikiPart ? `<div class="card story"><h2 style="margin-bottom:8px">מוויקיפדיה</h2>${wikiPart}</div>` : ''}`;
+  ${wikiCard}`;
 }
 
 /* more */
@@ -507,7 +561,7 @@ const A = {
   },
   disc: (e) => { discTab = e.dataset.t; render(); },
   discSave: (e) => { const d = T.discover[discTab][+e.dataset.k]; S.saved.unshift({ id: uid(), title: d.name, url: gmSearch(d), fav: true, lat: d.lat, lng: d.lng }); save(); toast('נשמר במועדפים ★'); },
-  discAdd: (e) => { const d = T.discover[discTab][+e.dataset.k]; daySheet((di) => { S.days[di].stops.push({ id: uid(), kind: d.kind, name: d.name, note: d.note, lat: d.lat, lng: d.lng }); save(); toast(`נוסף ליום ${META[di].short}`); }); },
+  discAdd: (e) => { const d = T.discover[discTab][+e.dataset.k]; daySheet((di) => { const ns = { id: uid(), kind: d.kind, name: d.name, note: d.note, lat: d.lat, lng: d.lng }; S.days[di].stops.push(ns); save(); toast(`נוסף ליום ${META[di].short}`); enrichStop(ns, true); }); },
   addLink: () => { const v = $('#sv-link').value.trim(); addShared(v, ''); },
   savedTab: (e) => { savedTab = e.dataset.t; render(); },
   savedFav: (e) => { const x = S.saved[+e.dataset.i]; x.fav = !x.fav; save(); render(); toast(x.fav ? 'נשמר במועדפים ★' : 'הוסר מהמועדפים'); },
@@ -532,18 +586,26 @@ const A = {
       $('#pl-results').innerHTML = res.length ? res.map((r, k) => `<button class="card" style="border:0;text-align:right;cursor:pointer" data-act="plPick" data-k="${k}"><b>${esc(r.name)}</b><div class="muted">${esc(r.sub)}</div></button>`).join('') : '<span class="muted">לא נמצא. נסה שם באנגלית או בספרדית.</span>';
     } catch (err) { $('#pl-results').innerHTML = '<span class="muted">החיפוש צריך חיבור לאינטרנט.</span>'; }
   },
-  plPick: (e) => { const r = sheetCtx.results[+e.dataset.k]; sheetCtx.pick = { lat: r.lat, lng: r.lng }; $('#pl-geo').textContent = 'יש מיקום ✓ ' + r.name; $('#pl-results').innerHTML = ''; },
+  plPick: (e) => {
+    const r = sheetCtx.results[+e.dataset.k]; sheetCtx.pick = { lat: r.lat, lng: r.lng }; sheetCtx.osm = r.osm;
+    $('#pl-geo').textContent = 'יש מיקום ✓ ' + r.name; $('#pl-results').innerHTML = '';
+    if (r.kind && (!sheetCtx.kindSel || sheetCtx.kindSel === 'star')) { sheetCtx.kindSel = r.kind; document.querySelectorAll('#pl-kinds .pill').forEach((b) => b.classList.toggle('on', b.dataset.k === r.kind)); }
+  },
   plSave: () => {
     const c = sheetCtx; const name = $('#pl-name').value.trim(); if (!name) { toast('צריך שם למקום'); return; }
     const note = $('#pl-note').value.trim();
     let item;
     if (c.si != null) { item = S.days[c.di].stops.splice(c.si, 1)[0]; } else { item = { id: uid(), kind: 'star' }; }
+    const changed = item.name !== name || !!c.pick && (c.pick.lat !== item.lat || c.pick.lng !== item.lng);
     Object.assign(item, { name, note, kind: c.kindSel || item.kind || 'star' }); if (c.pick) { item.lat = c.pick.lat; item.lng = c.pick.lng; }
+    if (c.osm) item.osm = c.osm; else if (changed) delete item.osm;
+    if (changed) delete item.details;
     if (c.si != null && c.day === c.di) S.days[c.di].stops.splice(c.si, 0, item); else S.days[c.day].stops.push(item);
     save(); closeSheet(); render();
     toast(c.si == null ? `נוסף ליום ${META[c.day].short}` : c.day === c.di ? 'נשמר' : `הועבר ליום ${META[c.day].short}`);
+    if (changed || !item.details) enrichStop(item, true);
   },
-  speak: (e) => { if (!('speechSynthesis' in window)) { toast('אין הקראה במכשיר הזה'); return; } if (speechSynthesis.speaking) { speechSynthesis.cancel(); return; } const t = $('#story-text'); if (!t) return; const u = new SpeechSynthesisUtterance(t.innerText.replace('הקרא לי', '')); u.lang = e.dataset.lang; u.rate = 0.95; speechSynthesis.speak(u); toast('לחץ שוב כדי לעצור'); },
+  speak: (e) => { if (!('speechSynthesis' in window)) { toast('אין הקראה במכשיר הזה'); return; } if (speechSynthesis.speaking) { speechSynthesis.cancel(); return; } const t = $('#story-text'); if (!t) return; const u = new SpeechSynthesisUtterance(t.innerText.replace('הקרא לי', '').replace(/הערך המלא בוויקיפדיה.*$/s, '')); u.lang = e.dataset.lang; u.rate = 0.95; speechSynthesis.speak(u); toast('לחץ שוב כדי לעצור'); },
   say: (e) => { if (!('speechSynthesis' in window)) { toast('אין השמעה במכשיר הזה'); return; } speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(e.dataset.t); u.lang = 'es-ES'; u.rate = 0.85; speechSynthesis.speak(u); },
   driver: () => { const H = S.hotel || {}; if (!H.name) { A.hotelEdit(); return; } sheet(`<h3>לנהג המונית</h3><div style="font-size:15px">Por favor, lléveme a:</div><div style="font-size:30px;font-weight:800;line-height:1.25" dir="ltr">${esc(H.name)}<br>${esc(H.address || '')}</div><button class="btn soft" data-act="closeSheet">סגירה</button>`); },
   hotelEdit: () => {
@@ -623,6 +685,7 @@ function addShared(text, title) {
 })();
 
 render();
+setTimeout(enrichAllSlowly, 2500);
 loadWeather();
 loadRate();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
