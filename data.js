@@ -36,10 +36,36 @@ window.TRIP = {
   // Opening-hours rules, checked against several sources on 10.11.2026. Re-check the official sites a week before the trip.
   rules: {
     closedSunday: { closed: [0], text: 'סגור בימי ראשון', hours: 'שני–שבת, בבוקר עד הערב' },
-    palauguell: { closed: [1], text: 'סגור בימי שני (חוץ מחגים)', hours: 'בחורף 10:00–17:30, כניסה אחרונה 16:30', src: 'https://www.barcelona.de/en/barcelona-palau-guell.html' },
-    mnac: { closed: [1], text: 'המוזיאון סגור בימי שני (חוץ מחגים)', hours: 'בחורף: שלישי–שבת 10:00–18:00, ראשון 10:00–15:00', src: 'https://www.museunacional.cat/en' },
+    palauguell: { closed: [1], raw: 'Tu-Su 10:00-17:30', text: 'סגור בימי שני (חוץ מחגים)', hours: 'בחורף 10:00–17:30, כניסה אחרונה 16:30', src: 'https://www.barcelona.de/en/barcelona-palau-guell.html' },
+    mnac: { closed: [1], raw: 'Tu-Sa 10:00-18:00; Su 10:00-15:00', text: 'המוזיאון סגור בימי שני (חוץ מחגים)', hours: 'בחורף: שלישי–שבת 10:00–18:00, ראשון 10:00–15:00', src: 'https://www.museunacional.cat/en' },
     shops: { closed: [0], text: 'רוב החנויות סגורות בימי ראשון' }
   },
+  // Places that sell tickets with an entry time. Official sites only. Checked 11.11.2026.
+  booking: [
+    { keys: ['sagrada', 'sagrada familia', 'סגרדה'], url: 'https://sagradafamilia.org/en/tickets', text: 'כניסה בשעה קבועה. בדצמבר נגמרים כרטיסים, להזמין שבועות מראש' },
+    { keys: ['parkguell', 'park guell', 'פארק גואל'], url: 'https://parkguell.barcelona/en/buy-tickets', text: 'לאזור המונומנטלי נכנסים בשעה קבועה. להזמין מראש' },
+    { keys: ['pedrera', 'casa mila', 'קאסה מילה'], url: 'https://www.lapedrera.com/en/tickets', text: 'כרטיס עם שעת כניסה. כדאי להזמין מראש' },
+    { keys: ['casa batllo', 'קאסה באטיו'], url: 'https://www.casabatllo.es/en/tickets/', text: 'כרטיס עם שעת כניסה. כדאי להזמין מראש' },
+    { keys: ['casavicens', 'casa vicens', 'קאסה ויסנס'], url: 'https://casavicens.org/tickets/', text: 'כרטיס עם שעת כניסה. כדאי להזמין מראש' },
+    { keys: ['palauguell', 'palau guell', 'ארמון גואל'], url: 'https://inici.palauguell.cat/en/tickets', text: 'כניסה במשבצות זמן. סגור בימי שני' },
+    { keys: ['flamenco', 'cordobes', 'פלמנקו'], url: 'https://www.tablaocordobes.es/en/', text: 'המופעים בשעות קבועות. להזמין מקום מראש' }
+  ],
+  // Holidays and events on the trip dates. Checked 11.11.2026; 2026 market dates were not published yet, so they are estimates.
+  holidays: { note: 'אין חג רשמי בברצלונה ב־13–17.12.2026. החגים הקרובים: 8.12 (לפני) ו־25–26.12 (אחרי). החנויות פתוחות כרגיל, חוץ מיום ראשון.', src: 'https://ajuntament.barcelona.cat/calendarifestius/en' },
+  events: [
+    { id: 'llucia', name: 'Fira de Santa Llúcia', he: 'שוק חג המולד ליד הקתדרלה', from: '2026-11-27', to: '2026-12-22', approx: true, hours: 'בערך 10:00–21:00 (לפי 2025)', raw: 'Mo-Su 10:00-21:00', lat: 41.3840, lng: 2.1758, kind: 'market', note: 'השוק הוותיק בעיר, מאז 1786: קישוטים, עצי חג ודמויות לתפאורת המולד', url: 'https://www.firadesantallucia.cat/', src: 'https://barcelonahacks.com/barcelona-christmas-markets/' },
+    { id: 'nadalsf', name: 'Fira de Nadal de la Sagrada Família', he: 'שוק חג המולד מול סגרדה פמיליה', from: '2026-11-21', to: '2026-12-22', approx: true, hours: 'בערך 10:00–21:00', raw: 'Mo-Su 10:00-21:00', lat: 41.4045, lng: 2.1746, kind: 'market', note: 'דוכני מלאכת יד וקישוטים בכיכר מול הבזיליקה', url: 'https://www.barcelona.com/things-to-do-in-barcelona/what-to-do-in-barcelona-in-december', src: 'https://barcelonahacks.com/barcelona-christmas-markets/' },
+    { id: 'lights', name: 'Llums de Nadal', he: 'אורות חג המולד ברחובות', from: '2026-11-26', to: '2027-01-06', approx: true, hours: 'כל ערב מהחשכה', lat: 41.3870, lng: 2.1701, kind: 'walk', note: 'הרחובות הראשיים מוארים כל ערב: Passeig de Gràcia, Portal de l’Àngel ו־Rambla Catalunya', src: 'https://www.barcelona.com/things-to-do-in-barcelona/what-to-do-in-barcelona-in-december' },
+    { id: 'pessebre', name: 'Pessebre a Plaça Sant Jaume', he: 'תפאורת המולד בכיכר העירייה', from: '2026-12-04', to: '2027-01-06', approx: true, hours: 'כל היום', lat: 41.3826, lng: 2.1770, kind: 'walk', note: 'בכל שנה העירייה מציבה בכיכר תפאורת מולד אחרת, ולפעמים מפתיעה', src: 'https://www.barcelona.com/things-to-do-in-barcelona/what-to-do-in-barcelona-in-december' }
+  ],
+  // Worth a look, but outside the trip dates or not confirmed yet
+  eventsNear: [
+    { name: 'מפצח האגוזים בליסאו', when: '8–12.12', why: 'לפני הטיול', url: 'https://www.liceubarcelona.cat/en' },
+    { name: 'אורטוריית חג המולד של באך, L’Auditori', when: '18–19.12', why: 'אחרי הטיול', url: 'https://www.auditori.cat/en' },
+    { name: 'La Nit de Nadal, Palau de la Música', when: '20.12', why: 'אחרי הטיול', url: 'https://www.palaumusica.cat/en' },
+    { name: 'משחקי הבית של ברסה', when: 'לבדוק', why: 'לוח המשחקים לאמצע דצמבר עוד לא נקבע סופית', url: 'https://www.fcbarcelona.com/en/football/first-team/calendar' },
+    { name: 'כל האירועים בעיר (העירייה)', when: 'מתעדכן', why: 'אתר האירועים הרשמי של ברצלונה', url: 'https://www.barcelona.cat/en/agenda' }
+  ],
   // Things worth knowing on a given day that are not closures.
   infos: {
     fountain: { days: [4, 5, 6], text: 'המזרקה הקסומה (Font Màgica) פועלת בחורף רק בחמישי–שבת, בערך מ־20:00', src: 'https://www.barcelona.com/barcelona-theme-park/magic-fountain' }

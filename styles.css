@@ -153,3 +153,13 @@ button > svg, a > svg, .card > svg { width: 20px; height: 20px; flex: none; }
 #lb .lb-prev { right: 10px; top: 50%; transform: translateY(-50%); }
 #lb .lb-next { left: 10px; top: 50%; transform: translateY(-50%); }
 #lb .lb-count { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); left: 0; right: 0; text-align: center; color: #fff; font-size: 13px; opacity: .85; pointer-events: none; }
+/* v16: day timeline, tickets, diet card */
+.tl { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; font-size: 12px; font-weight: 700; color: var(--navy); }
+.tl > span { display: inline-flex; align-items: center; gap: 4px; background: #EEF2FA; border-radius: 8px; padding: 2px 7px; }
+.tl svg { width: 13px; height: 13px; }
+.tl .warnc { background: #FFF4D6; color: #8A4B00; }
+.tl .okc { background: #E6F6F3; color: #137A6E; }
+.dcard { background: #fff; color: #111; border: 3px solid var(--teal); border-radius: 20px; padding: 18px; font-size: 20px; line-height: 1.45; text-align: left; }
+.dcard p { margin: 0 0 10px; }
+.dcard:fullscreen, .dcard.full { position: fixed; inset: 0; z-index: 3000; border-radius: 0; font-size: 30px; padding: 32px; overflow: auto; display: flex; flex-direction: column; justify-content: center; }
+input[type=checkbox] { accent-color: var(--teal); }

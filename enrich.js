@@ -311,7 +311,7 @@ window.Enrich = (() => {
     if (osm) {
       const t = osm.tags; out.osm = osm.osm;
       out.kind = kindFrom(Object.keys(t).find((k) => ['amenity', 'tourism', 'leisure', 'shop', 'historic', 'natural'].includes(k)), t.amenity || t.tourism || t.leisure || t.shop || t.historic || t.natural);
-      if (t.opening_hours) out.hours = parseHours(t.opening_hours);
+      if (t.opening_hours) { out.hours = parseHours(t.opening_hours); out.hoursRaw = t.opening_hours; }
       out.website = t.website || t['contact:website'] || '';
       out.phone = t.phone || t['contact:phone'] || '';
       out.vegan = t['diet:vegan'] || ''; out.gf = t['diet:gluten_free'] || '';
