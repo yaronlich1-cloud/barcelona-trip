@@ -76,7 +76,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '7 · 11.11';
+const VERSION = '8 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -159,7 +159,7 @@ function articleFor(s) {
   }
   return 'loading';
 }
-const enriching = new Set();
+const enriching = new Set(); const retried = new Set();
 async function enrichStop(stop, force) {
   if (!window.Enrich || enriching.has(stop.id) || stop.hotelRef) return;
   if (!force && stop.details && Date.now() - stop.details.at < (stop.details.partial ? 3600e3 : 7 * 864e5)) return;
@@ -371,7 +371,7 @@ V.place = (di, id) => {
   setDayColor(di);
   const cn = closedNote(s, m.date);
   const w = articleFor(s);
-  if (!s.details && !s.hotelRef) enrichStop(s);
+  if (!s.hotelRef && (!s.details || (s.details.partial && !retried.has(s.id)))) { retried.add(s.id); enrichStop(s, true); }
   return pageHead(s.name, `יום ${m.short} ${m.num}.12 · ${s.note || ''}`, '#today') + `<div class="section">
     ${cn ? (() => { const to = suggestDay(s, di); return `<div class="warn">${ic('warn')}<span class="grow">${cn}.${to != null ? `<br><button class="btn sun sm" style="margin-top:6px" data-act="moveTo" data-d="${di}" data-id="${s.id}" data-to="${to}">להעביר ליום ${META[to].short} ${META[to].num}.12</button>` : ''}</span></div>`; })() : ''}
     ${infoNote(s, m.date) ? `<div class="warn" style="background:#EEF2FA;color:var(--navy)">${ic('warn')}<span>${infoNote(s, m.date)}.</span></div>` : ''}

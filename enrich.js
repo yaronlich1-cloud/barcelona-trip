@@ -2,10 +2,13 @@
 // OpenStreetMap (Overpass) for type, hours, diet tags, website and phone; Wikidata + Wikipedia for the article and photos.
 window.Enrich = (() => {
   'use strict';
-  const getJSON = async (url, tries = 2) => {
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass-api.de/api/interpreter'];
+  const getJSON = async (url, tries = 2, timeout = 12000) => {
     for (let i = 0; ; i++) {
-      try { const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeout);
+      try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
       catch (err) { if (i + 1 >= tries) throw err; await new Promise((res) => setTimeout(res, 1500 * (i + 1))); }
+      finally { clearTimeout(t); }
     }
   };
   const OSM_TYPE = { N: 'node', W: 'way', R: 'relation', node: 'node', way: 'way', relation: 'relation' };
@@ -21,7 +24,11 @@ window.Enrich = (() => {
       if (!/[a-zA-Z]/.test(nm)) return null; // Hebrew-only names rarely match OSM names
       q = `[out:json][timeout:15];nwr(around:90,${stop.lat},${stop.lng})["name"~"${reEsc(nm)}",i];out tags center 1;`;
     } else return null;
-    const d = await getJSON('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q));
+    let d = null;
+    for (const host of OVERPASS) {
+      try { d = await getJSON(`${host}?data=${encodeURIComponent(q)}`, 1, 9000); break; } catch (err) { /* try the next server */ }
+    }
+    if (!d) throw new Error('overpass unavailable');
     const el = d.elements && d.elements[0];
     return el ? { tags: el.tags || {}, osm: { type: el.type, id: el.id } } : null;
   }
