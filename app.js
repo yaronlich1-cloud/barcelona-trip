@@ -76,7 +76,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '10 · 11.11';
+const VERSION = '11 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -184,7 +184,7 @@ async function enrichStop(stop, force) {
     if ((!stop.kind || stop.kind === 'star') && d.kind) stop.kind = d.kind;
     save();
     const h = location.hash;
-    if (h.startsWith('#place/') || h === '#today' || h === '' || h === '#places') render();
+    if (h.startsWith('#place/') || h === '#today' || h === '' || h === '#places') render(); else if (h === '#map') drawMarkers(false);
   } catch (e) { /* offline or rate limited: try again later */ } finally { enriching.delete(stop.id); }
 }
 function enrichAllSlowly() {
@@ -258,7 +258,7 @@ V.today = () => {
   return hero({ chips }) + `
   <div class="head"><span class="eyebrow">יום ${i + 1} מתוך 5 · ${m.short} ${m.num}.12</span><h1 class="pop">${esc(m.title)}</h1></div>
   <div class="days" role="tablist" aria-label="ימי הטיול">${META.map((d, k) => `<button class="dayb ${k === i ? 'on' : ''}" style="--c:${d.color}" role="tab" aria-selected="${k === i}" data-act="day" data-i="${k}"><b>${d.num}</b><span>${d.short}</span>${weather && weather[d.date] ? `<i>${weather[d.date].max}°</i>` : ''}</button>`).join('')}</div>
-  <div class="section">${warns}${flightWarn}</div>
+  <div class="section">${installEvt && !standalone() ? `<button class="btn navy sm" data-act="install">${ic('plus')}התקן את האפליקציה בטלפון</button>` : ''}${warns}${flightWarn}</div>
   ${nx ? `<div class="next pop"><div class="lbl"><span class="dot"></span>הבא בתור</div><div><div class="name">${esc(nx.name)}</div><div style="font-size:13px;opacity:.9">${esc(nx.note || '')}</div></div>
     <div class="row"><a class="btn sun grow" href="${gmDir(null, nx, 'walking')}" target="_blank" rel="noopener">${ic('pin')}נווט ב־Google Maps</a><a class="btn ghost" href="#place/${i}/${nx.id}">על המקום</a></div></div>` : ''}
   <div class="section">
@@ -288,7 +288,7 @@ let mapDay = null, mapSel = null, meMarker = null;
 const LAYER = { food: '#1E9E8F', bars: '#C2417F', tops: '#13213D' };
 function mapStops() {
   if (LAYER[mapDay]) return T.discover[mapDay].map((t, k) => ({ ...t, id: mapDay + k, color: LAYER[mapDay] }));
-  if (mapDay === 'saved') return S.saved.filter(hasGeo).map((x) => ({ ...x, name: x.title, note: 'מהשמורים', kind: 'star', id: 's' + x.id, color: '#D99400' }));
+  if (mapDay === 'saved') return S.saved.map((x) => { const l = linkedStop(x); return { ...x, lat: x.lat ?? (l && l.st.lat), lng: x.lng ?? (l && l.st.lng), name: x.title, note: 'מהשמורים', kind: 'star', id: 's' + x.id, color: '#D99400' }; }).filter(hasGeo);
   const d = mapDay ?? curIdx(); return S.days[d].stops.map((s) => ({ ...s, color: META[d].color }));
 }
 const isLayer = () => typeof mapDay === 'string';
@@ -296,7 +296,8 @@ function mapCard() {
   const s = mapStops().find((x) => x.id === mapSel); if (!s) return '';
   return `<div class="map-card pop"><div class="row"><span class="tile" style="--c:${s.color}">${ic(s.kind)}</span><div class="grow"><div style="font-weight:800;font-size:18px">${esc(s.name)}</div><div class="muted">${esc(s.note || '')}</div></div><button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
   <span class="muted" style="font-weight:800">איך מגיעים? בחר ונפתח ב־Google Maps</span>
-  <div class="row"><a class="btn sun grow" href="${gmDir(null, s, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft grow" href="${gmDir(null, s, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה ציבורית</a></div></div>`;
+  <div class="row"><a class="btn sun grow" href="${gmDir(null, s, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft grow" href="${gmDir(null, s, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה ציבורית</a></div>
+  ${typeof mapDay === 'number' ? `<a class="btn soft sm" href="#place/${mapDay}/${s.id}">על המקום</a>` : ''}</div>`;
 }
 function mountMap() {
   if (!window.L) { $('#leaflet').innerHTML = '<div class="section muted">המפה צריכה חיבור לאינטרנט.</div>'; return; }
@@ -349,6 +350,7 @@ V.discover = () => {
 };
 
 /* saved */
+function linkedStop(x) { if (!x.url) return null; for (let k = 0; k < S.days.length; k++) { const st = S.days[k].stops.find((s) => s.url === x.url); if (st) return { di: k, st }; } return null; }
 let savedTab = 'inbox';
 const srcKind = (u) => /instagram\.com/.test(u) ? 'ig' : /tiktok\.com/.test(u) ? 'tt' : /(maps\.app\.goo\.gl|google\.[a-z.]+\/maps|goo\.gl\/maps)/.test(u) ? 'pin' : 'link';
 const SRC = { ig: ['אינסטגרם', '#C2417F'], tt: ['טיקטוק', '#13213D'], pin: ['Google Maps', '#1E9E8F'], link: ['קישור', '#2453C9'] };
@@ -363,9 +365,9 @@ V.saved = () => {
     </div>
     <div class="seg"><button class="${savedTab === 'inbox' ? 'on' : ''}" data-act="savedTab" data-t="inbox">נכנסו · ${S.saved.filter((x) => !x.fav).length}</button><button class="${savedTab === 'fav' ? 'on' : ''}" data-act="savedTab" data-t="fav">★ מועדפים · ${S.saved.filter((x) => x.fav).length}</button></div>
     ${list.length ? list.map(({ x, i }) => { const k = srcKind(x.url || ''); const m = SRC[k]; return `<div class="card pop" style="display:flex;flex-direction:column;gap:10px">
-      <div class="row"><span class="tile ${ROT[i % 4]}" style="--c:${m[1]}">${ic(k)}</span><div class="grow"><div style="font-size:11px;font-weight:800;color:${m[1]}">${m[0]}${x.day ? ' · נוסף ליום ' + esc(x.day) : ''}</div><div style="font-weight:800;font-size:16px">${esc(x.title || 'בלי שם')}</div>${x.url ? `<div class="muted" dir="ltr" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.url)}</div>` : ''}</div>
+      <div class="row"><span class="tile ${ROT[i % 4]}" style="--c:${m[1]}">${ic(k)}</span><div class="grow"><div style="font-size:11px;font-weight:800;color:${m[1]}">${m[0]}${linkedStop(x) ? ' · נוסף ליום ' + META[linkedStop(x).di].short : ''}</div><div style="font-weight:800;font-size:16px">${esc(x.title || 'בלי שם')}</div>${x.url ? `<div class="muted" dir="ltr" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.url)}</div>` : ''}</div>
       <button class="icon-btn danger" data-act="savedDel" data-i="${i}" aria-label="מחיקה">${ic('trash')}</button></div>
-      <div class="row"><button class="btn sun sm grow" data-act="savedToDay" data-i="${i}">${x.day ? 'ביום ' + esc(x.day) + ' ✓' : 'הוסף ליום…'}</button><button class="btn soft sm grow" style="background:${x.fav ? '#FFE7A3' : '#FFF4D6'}" data-act="savedFav" data-i="${i}">${ic('star')}${x.fav ? 'במועדפים' : 'למועדפים'}</button>${x.url ? `<a class="icon-btn" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="פתיחת הקישור">${ic('link')}</a>` : ''}</div></div>`; }).join('') : `<div class="muted" style="text-align:center;padding:24px 0">${savedTab === 'fav' ? 'עוד אין מועדפים. לחץ ★ על קישור או מקום.' : 'אין כאן כלום עדיין. הדבק קישור למעלה או שתף מאינסטגרם.'}</div>`}
+      <div class="row"><button class="btn sun sm grow" data-act="savedToDay" data-i="${i}">${linkedStop(x) ? 'ביום ' + META[linkedStop(x).di].short + ' ✓' : 'הוסף ליום…'}</button><button class="btn soft sm grow" style="background:${x.fav ? '#FFE7A3' : '#FFF4D6'}" data-act="savedFav" data-i="${i}">${ic('star')}${x.fav ? 'במועדפים' : 'למועדפים'}</button>${x.url ? `<a class="icon-btn" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="פתיחת הקישור">${ic('link')}</a>` : ''}</div></div>`; }).join('') : `<div class="muted" style="text-align:center;padding:24px 0">${savedTab === 'fav' ? 'עוד אין מועדפים. לחץ ★ על קישור או מקום.' : 'אין כאן כלום עדיין. הדבק קישור למעלה או שתף מאינסטגרם.'}</div>`}
   </div>`;
 };
 
@@ -452,6 +454,7 @@ V.more = () => { const H = S.hotel || {}; return pageHead('עוד דברים', '
   ${H.name ? `<div class="card row"><span class="tile r1" style="--c:var(--navy)">${ic('hotel')}</span><div class="grow"><div style="font-weight:800">${esc(H.name)}</div><div class="muted">${esc(H.address || '')}</div></div><button class="icon-btn" data-act="hotelEdit" aria-label="עריכת המלון">${ic('pen')}</button></div>
   <div class="row"><a class="btn sun sm grow" href="${hasGeo(H) ? gmDir(null, H, 'walking') : gmSearch({ name: H.name })}" target="_blank" rel="noopener">${ic('pin')}נווט למלון</a><button class="btn soft sm grow" data-act="driver">הראה לנהג המונית</button></div>`
   : `<button class="card row" style="border:2px dashed var(--line);cursor:pointer;text-align:right" data-act="hotelEdit"><span class="tile r1" style="--c:var(--navy)">${ic('hotel')}</span><div class="grow"><div style="font-weight:800">הוסף את המלון שלך</div><div class="muted">נשמר רק בטלפון הזה. משמש לניווט, למסך הנהג ולמסלול</div></div>${ic('plus')}</button>`}
+  ${installCard()}
   <div class="grid2">
     ${[['#places', 'list', 'המקומות', 'עריכה והעברה בין ימים', '#2453C9'], ['#expenses', 'coin', 'הוצאות', `€${Math.round(spent())} מתוך €${S.budget}`, '#E8553D'], ['#packing', 'bag', 'ציוד', `${packCount()}`, '#1E9E8F'], ['#flights', 'plane', 'טיסות', S.flights.back.time ? `חזרה ${S.flights.back.time}` : 'הוסף פרטי טיסה', '#13213D'], ['#transport', 'metro', 'תחבורה', 'מהשדה, כרטיסים, מטרו', '#2453C9'], ['#phrases', 'chat', 'ספרדית', 'משפטים עם השמעה', '#C2417F'], ['#shopping', 'tag', 'קניות', 'מבצעים והחזר מע״מ', '#D99400'], ['#emergency', 'sos', 'חירום', '112 · ביטוח · בית מרקחת', '#E8553D']]
       .map(([h, k, t, s, c]) => `<a class="big" href="${h}" style="--c:${c}"><span class="ic">${ic(k)}</span><span style="display:flex;flex-direction:column"><b>${t}</b><span>${esc(s)}</span></span></a>`).join('')}
@@ -517,6 +520,17 @@ V.flights = () => {
   <span class="muted">שעת היציאה מחושבת כך: 3 שעות לפני ההמראה בשדה, ועוד כ־40 דקות נסיעה.</span></div>`;
 };
 
+/* ---------- install ---------- */
+let installEvt = null;
+const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; if (['#more', '#today', ''].includes(location.hash)) render(); });
+window.addEventListener('appinstalled', () => { installEvt = null; toast('האפליקציה הותקנה ✓'); render(); });
+function installCard() {
+  if (standalone()) return '';
+  if (installEvt) return `<button class="btn navy" data-act="install">${ic('plus')}התקן את האפליקציה בטלפון</button>`;
+  return '<div class="card muted">להתקנה: בכרום לוחצים ⋮ ← "הוסף למסך הבית". באייפון: Safari ← שיתוף ← "הוסף למסך הבית".</div>';
+}
+
 /* ---------- render + routing ---------- */
 function render() {
   const h = (location.hash || '#today').slice(1); const [name, ...args] = h.split('/');
@@ -568,6 +582,7 @@ const A = {
     sheetCtx = { kind: 'sort', i, ids: order.concat(rest).map((s) => s.id) };
   },
   reEnrich: (e) => { const s = S.days[+e.dataset.d].stops.find((x) => x.id === e.dataset.id); if (!s) return; delete s.details; enrichStop(s, true); render(); toast('מחפש מידע…'); },
+  install: async () => { if (!installEvt) return; installEvt.prompt(); const r = await installEvt.userChoice; installEvt = null; if (r.outcome !== 'accepted') toast('אפשר להתקין גם מתפריט ⋮ בכרום'); render(); },
   moveTo: (e) => {
     const d = +e.dataset.d, to = +e.dataset.to; const k = S.days[d].stops.findIndex((x) => x.id === e.dataset.id); if (k < 0) return;
     const [x] = S.days[d].stops.splice(k, 1); S.days[to].stops.push(x); save(); render(); toast(`"${x.name}" עבר ליום ${META[to].short}. אפשר לסדר את היום ב"סדר לי את היום"`);
@@ -589,7 +604,7 @@ const A = {
   savedDel: (e) => { S.saved.splice(+e.dataset.i, 1); save(); render(); toast('נמחק'); },
   savedToDay: (e) => {
     const i = +e.dataset.i; const x = S.saved[i];
-    daySheet((di) => { S.days[di].stops.push({ id: uid(), kind: 'star', name: x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat, lng: x.lng, url: x.url }); x.day = META[di].short; save(); render(); if (!hasGeo(x)) { placeSheet(di, S.days[di].stops.length - 1); toast('נוסף. עכשיו בחר את המיקום במפה'); } else toast(`נוסף ליום ${META[di].short}`); });
+    daySheet((di) => { S.days[di].stops.push({ id: uid(), kind: 'star', name: x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat, lng: x.lng, url: x.url }); x.day = META[di].short; save(); render(); const ns = S.days[di].stops[S.days[di].stops.length - 1]; enrichStop(ns, true); if (!hasGeo(x)) { placeSheet(di, S.days[di].stops.length - 1); toast('נוסף. אפשר לבחור מיקום מדויק, או שאחפש אותו לבד'); } else toast(`נוסף ליום ${META[di].short}`); });
   },
   placeAdd: (e) => placeSheet(+e.dataset.d, null),
   placeEdit: (e) => placeSheet(+e.dataset.d, +e.dataset.s),
@@ -603,9 +618,10 @@ const A = {
     $('#pl-results').innerHTML = '<span class="muted">מחפש…</span>';
     try {
       const res = await searchPlaces(name);
+      if (!$('#pl-results')) return;
       sheetCtx.results = res;
       $('#pl-results').innerHTML = res.length ? res.map((r, k) => `<button class="card" style="border:0;text-align:right;cursor:pointer" data-act="plPick" data-k="${k}"><b>${esc(r.name)}</b><div class="muted">${esc(r.sub)}</div></button>`).join('') : '<span class="muted">לא נמצא. נסה שם באנגלית או בספרדית.</span>';
-    } catch (err) { $('#pl-results').innerHTML = '<span class="muted">החיפוש צריך חיבור לאינטרנט.</span>'; }
+    } catch (err) { if ($('#pl-results')) $('#pl-results').innerHTML = '<span class="muted">החיפוש צריך חיבור לאינטרנט.</span>'; }
   },
   plPick: (e) => {
     const r = sheetCtx.results[+e.dataset.k]; sheetCtx.pick = { lat: r.lat, lng: r.lng }; sheetCtx.osm = r.osm;
@@ -642,9 +658,9 @@ const A = {
   htSearch: async () => {
     const name = $('#ht-name').value.trim(); if (!name) { toast('כתוב את שם המלון'); return; }
     $('#ht-results').innerHTML = '<span class="muted">מחפש…</span>';
-    try { const res = await searchPlaces(name); sheetCtx.results = res;
+    try { const res = await searchPlaces(name); if (!$('#ht-results')) return; sheetCtx.results = res;
       $('#ht-results').innerHTML = res.length ? res.map((r, k) => `<button class="card" style="border:0;text-align:right;cursor:pointer" data-act="htPick" data-k="${k}"><b>${esc(r.name)}</b><div class="muted">${esc(r.sub)}</div></button>`).join('') : '<span class="muted">לא נמצא. נסה שם באנגלית.</span>';
-    } catch (err) { $('#ht-results').innerHTML = '<span class="muted">החיפוש צריך חיבור לאינטרנט.</span>'; }
+    } catch (err) { if ($('#ht-results')) $('#ht-results').innerHTML = '<span class="muted">החיפוש צריך חיבור לאינטרנט.</span>'; }
   },
   htPick: (e) => { const r = sheetCtx.results[+e.dataset.k]; sheetCtx.pick = { lat: r.lat, lng: r.lng }; $('#ht-geo').textContent = 'יש מיקום ✓'; if (!$('#ht-addr').value && r.sub) $('#ht-addr').value = r.sub; $('#ht-results').innerHTML = ''; },
   htSave: () => {
