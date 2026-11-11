@@ -135,3 +135,6 @@ label.lab { display: flex; flex-direction: column; gap: 4px; font-size: 12px; fo
 .badge { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 1px 8px; border: 1.5px solid currentColor; }
 @media (prefers-reduced-motion: reduce) { .tile-anim, .sun, .dot, .pop { animation: none; } }
 .mk svg { width: 18px; height: 18px; stroke: #fff; }
+
+.fab { position: fixed; z-index: 800; bottom: calc(88px + env(safe-area-inset-bottom)); left: max(16px, calc(50% - 264px)); border: 3px solid #fff; border-radius: 20px 20px 20px 6px; background: var(--sun); color: var(--navy); font: 800 16px var(--body); padding: 12px 18px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 8px 20px rgba(19,33,61,.3); cursor: pointer; }
+.fab svg { width: 20px; height: 20px; stroke-width: 2.6; }

@@ -76,7 +76,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '8 · 11.11';
+const VERSION = '9 · 11.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -250,10 +250,13 @@ V.today = () => {
     <div class="row"><a class="btn sun grow" href="${gmDir(null, nx, 'walking')}" target="_blank" rel="noopener">${ic('pin')}נווט ב־Google Maps</a><a class="btn ghost" href="#place/${i}/${nx.id}">על המקום</a></div></div>` : ''}
   <div class="section">
     <h2>המסלול · בחר איך לעבור בין המקומות</h2>
+    <button class="btn sun" data-act="placeAdd" data-d="${i}">${ic('plus')}הוסף מקום ליום ${m.short}</button>
     <div class="row"><button class="btn line sm grow" data-act="sortDay">${ic('sort')}סדר לי את היום</button><a class="btn line sm grow" href="#places">${ic('pen')}עריכה</a></div>
     <a class="btn navy sm" href="${dayUrl}" target="_blank" rel="noopener">${ic('pin')}כל היום ב־Google Maps</a>
-    ${list || '<div class="card muted">אין עדיין מקומות ביום הזה. <a href="#places">הוסף מקום</a></div>'}
-  </div>`;
+    ${list || '<div class="card muted">אין עדיין מקומות ביום הזה.</div>'}
+    <div style="height:64px"></div>
+  </div>
+  <button class="fab" data-act="placeAdd" data-d="${i}" aria-label="הוסף מקום">${ic('plus')}מקום</button>`;
 };
 
 function leaveBy() {
