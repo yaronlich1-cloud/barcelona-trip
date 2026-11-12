@@ -88,7 +88,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '24 · 12.11';
+const VERSION = '25 · 12.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -575,8 +575,9 @@ function leaveBy() {
 let map, layer;
 let mapSheet = 'peek';
 V.map = () => { if (mapDay == null) mapDay = curIdx(); return `<div class="mapwrap"><div id="leaflet" aria-label="מפת המסלול"></div>
+  <div class="mtop">${mapTopInner()}</div>
   <button class="icon-btn map-loc" data-act="locate" aria-label="המיקום שלי">${ic('locate')}</button>
-  <div class="msheet" data-state="${mapSheet}">${mapSheetInner()}</div></div>`; };
+  <div class="mcard ${mapSel ? 'on' : ''}">${mapCardInner()}</div></div>`; };
 // Map layers you can turn on together with the day's route
 const MAP_LAYERS = [['gems', '💎 פנינים', '#2453C9'], ['food', 'טבעוני וללא גלוטן', '#1E9E8F'], ['shop', 'אופנה וקניות', '#D99400'], ['recs', 'ברים והמלצות', '#C2417F'], ['saved', 'שמורים', '#8A5CD0']];
 let mapLayers = new Set();
@@ -607,22 +608,25 @@ function ovCard(sel) {
     <div class="row"><button class="btn sun sm grow" data-act="mapAddOv" data-id="${sel.id}">${ic('plus')}לשלב ביום ${META[mapDay].short}</button><a class="btn soft sm" href="${ovHref(sel)}">${ic('pin')}פרטים</a><a class="btn soft sm" href="${gmDir(null, sel, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('walk')}</a></div>
     ${g ? `<button class="lnk muted" data-act="mapGemNo" data-id="${sel.id}" style="align-self:flex-start">לא בשבילי, להסתיר</button>` : ''}</div>`;
 }
-function mapSheetInner() {
-  const items = mapStops().filter(hasGeo); const ov = overlayItems();
-  const sel = mapSel && (items.find((x) => x.id === mapSel) || ov.find((x) => x.id === mapSel));
-  const title = `${META[mapDay].short} ${META[mapDay].num}.12 · ${META[mapDay].title}`;
-  const groups = [...mapLayers].map((k) => { const L = MAP_LAYERS.find((l) => l[0] === k); const list = ov.filter((x) => x.layer === k); const ld = k === 'shop' && layerItems('shop').loading; return `<div class="ms-h" style="--c:${L[2]}"><span class="dot"></span>${L[1]}<span class="muted">${ld ? 'מחפש…' : `${list.length} ליד המסלול`}</span></div>${list.length ? `<div class="list">${list.slice(0, 15).map((x) => `<div class="li ${x.id === mapSel ? 'sel' : ''}" data-act="mapPick" data-id="${x.id}"><span class="tile" style="--c:${x.color}">${ic(x.kind)}</span><div class="grow"><div class="li-t">${esc(x.name)}</div><div class="li-m">${esc(cut(x.note || '', 46))}${x.d ? ` · ${fmtKm(x.d)}` : ''}</div></div><button class="add" data-act="mapAddOv" data-id="${x.id}" aria-label="לשלב ביום">${ic('plus')}</button></div>`).join('')}</div>` : ''}`; }).join('');
-  return `<div class="ms-top" data-act="msToggle"><div class="grab"></div><div class="row"><b class="grow">${esc(title)}</b><span class="muted">${items.length} במסלול${ov.length ? ` · ${ov.length} בשכבות` : ''}</span></div></div>
-    ${sel ? (sel.layer ? ovCard(sel) : `<div class="ms-sel"><div class="row"><span class="ms-n" style="--c:${sel.color}">${items.indexOf(sel) + 1}</span><span class="tile" style="--c:${sel.color}">${ic(sel.kind)}</span><div class="grow"><b>${esc(sel.name)}</b><div class="muted">${esc(sel.note || '')}</div></div><button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
+let mtOpen = null;
+function mapTopInner() {
+  const items = mapStops().filter(hasGeo); const m = META[mapDay];
+  return `<div class="mt-days">${META.map((d, k) => `<button class="${k === mapDay ? 'on' : ''}" style="--c:${d.color}" data-act="mapDay" data-i="${k}"><b>${d.num}</b><span>${d.short}</span></button>`).join('')}</div>
+    <div class="mt-row"><button class="mt-btn ${mtOpen === 'route' ? 'on' : ''}" style="--c:${m.color}" data-act="mtOpen" data-k="route"><span class="dot"></span><span class="grow">המסלול · ${items.length} מקומות</span><span class="chev">${mtOpen === 'route' ? '▴' : '▾'}</span></button>
+      <button class="mt-btn ${mtOpen === 'lays' ? 'on' : ''}" data-act="mtOpen" data-k="lays">${ic('list')}<span class="grow">שכבות${mapLayers.size ? ` · ${mapLayers.size}` : ''}</span><span class="chev">${mtOpen === 'lays' ? '▴' : '▾'}</span></button></div>
+    ${mapLayers.size && mtOpen !== 'lays' ? `<div class="mt-on">${[...mapLayers].map((k) => { const L = MAP_LAYERS.find((l) => l[0] === k); return `<span style="--c:${L[2]}"><i></i>${L[1]}</span>`; }).join('')}</div>` : ''}
+    ${mtOpen === 'lays' ? `<div class="mt-panel"><div class="ms-lays">${MAP_LAYERS.map(([k, t, c]) => { const n = mapLayers.has(k) ? layerItems(k) : null; return `<button class="pill ${mapLayers.has(k) ? 'on' : ''}" style="--c:${c}" data-act="mapLayer" data-k="${k}" aria-pressed="${mapLayers.has(k)}">${mapLayers.has(k) ? '✓ ' : ''}${t}${n ? (n.loading && !n.length ? ' · מחפש…' : ` · ${n.length}`) : ''}</button>`; }).join('')}</div><span class="muted" style="font-size:12px">השכבות מוצגות ליד המסלול של היום שבחרת. לחץ על סמן כדי לראות פרטים.</span></div>` : ''}
+    ${mtOpen === 'route' ? `<div class="mt-panel"><div class="list">${items.map((x, n) => `<div class="li ${x.id === mapSel ? 'sel' : ''}" data-act="mapPick" data-id="${x.id}"><span class="ms-n" style="--c:${x.color}">${n + 1}</span><span class="tile" style="--c:${x.color}">${ic(x.kind)}</span><div class="grow"><div class="li-t">${esc(x.name)}</div>${x.note ? `<div class="li-m">${esc(cut(x.note, 44))}</div>` : ''}</div></div>`).join('') || '<div class="li muted">אין ביום הזה מקומות עם מיקום.</div>'}</div>
+      <div class="edrow"><button class="chipbtn" data-act="mapSort">${ic('sort')}סדר לי את היום</button><button class="chipbtn" data-act="placeAdd" data-d="${mapDay}">${ic('plus')}הוסף מקום</button><span class="muted grow">או לחיצה ארוכה במפה</span></div></div>` : ''}`;
+}
+function mapCardInner() {
+  const items = mapStops().filter(hasGeo); if (!mapSel) return '';
+  const sel = items.find((x) => x.id === mapSel) || overlayItems().find((x) => x.id === mapSel); if (!sel) return '';
+  if (sel.layer) return ovCard(sel);
+  return `<div class="ms-sel"><div class="row"><span class="ms-n" style="--c:${sel.color}">${items.indexOf(sel) + 1}</span><span class="tile" style="--c:${sel.color}">${ic(sel.kind)}</span><div class="grow"><b>${esc(sel.name)}</b><div class="muted">${esc(sel.note || '')}</div></div><button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
       <div class="row"><a class="btn sun sm grow" href="${gmDir(null, sel, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft sm grow" href="${gmDir(null, sel, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה</a><a class="btn soft sm" href="#place/${mapDay}/${sel.id}">על המקום</a></div>
       <div class="edrow"><button class="chipbtn" data-act="mapMove" data-dir="-1" aria-label="מוקדם יותר">${ic('up')}מוקדם</button><button class="chipbtn" data-act="mapMove" data-dir="1" aria-label="מאוחר יותר">${ic('down')}מאוחר</button><button class="chipbtn" data-act="mapToDay">${ic('list')}ליום אחר</button><button class="chipbtn" data-act="mapEdit">${ic('pen')}עריכה</button>${sel.hotelRef ? '' : `<button class="chipbtn danger" data-act="mapDel">${ic('trash')}</button>`}</div>
-      <span class="muted">אפשר גם לגרור את הסמן במפה כדי להזיז את המקום.</span></div>`) : ''}
-    <div class="ms-days">${META.map((d, k) => `<button class="${k === mapDay ? 'on' : ''}" style="--c:${d.color}" data-act="mapDay" data-i="${k}"><b>${d.num}</b><span>${d.short}</span></button>`).join('')}</div>
-    <div class="ms-lays"><span class="muted">להציג גם:</span>${MAP_LAYERS.map(([k, t, c]) => `<button class="pill ${mapLayers.has(k) ? 'on' : ''}" style="--c:${c}" data-act="mapLayer" data-k="${k}" aria-pressed="${mapLayers.has(k)}">${mapLayers.has(k) ? '✓ ' : ''}${t}</button>`).join('')}</div>
-    <div class="edrow"><button class="chipbtn" data-act="mapSort">${ic('sort')}סדר לי את היום</button><button class="chipbtn" data-act="placeAdd" data-d="${mapDay}">${ic('plus')}הוסף מקום</button><span class="muted grow">או לחיצה ארוכה במפה</span></div>
-    <div class="ms-h" style="--c:${META[mapDay].color}"><span class="dot"></span>המסלול של היום</div>
-    <div class="list">${items.map((x, n) => `<div class="li ${x.id === mapSel ? 'sel' : ''}" data-act="mapPick" data-id="${x.id}"><span class="ms-n" style="--c:${x.color}">${n + 1}</span><span class="tile" style="--c:${x.color}">${ic(x.kind)}</span><div class="grow"><div class="li-t">${esc(x.name)}</div>${x.note ? `<div class="li-m">${esc(cut(x.note, 50))}</div>` : ''}</div><span class="chev">‹</span></div>`).join('') || '<div class="li muted">אין ביום הזה מקומות עם מיקום.</div>'}</div>
-    ${groups}`;
+      <span class="muted" style="font-size:12px">אפשר גם לגרור את הסמן במפה כדי להזיז את המקום.</span></div>`;
 }
 function addHereSheet(lat, lng) {
   haptic(15);
@@ -640,20 +644,8 @@ function addHereSheet(lat, lng) {
     sheetCtx.k = window.Enrich ? Enrich.kindFrom(pr.osm_key, pr.osm_value) : null;
   }).catch(() => { if ($('#ah-sub')) $('#ah-sub').textContent = 'כתוב שם למקום.'; });
 }
-function renderMapSheet() { const el = $('.msheet'); if (!el) return; el.dataset.state = mapSheet; el.style.transform = ''; el.innerHTML = mapSheetInner(); }
-function bindMapSheet() {
-  const el = $('.msheet'); if (!el) return; let y0 = null, base = 0, dy = 0, t0 = 0;
-  const pos = () => el.getBoundingClientRect().top;
-  el.addEventListener('touchstart', (e) => { if (!e.target.closest('.ms-top') && el.scrollTop > 0) { y0 = null; return; } if (!e.target.closest('.ms-top') && mapSheet === 'full') { y0 = null; return; } y0 = e.touches[0].clientY; base = pos() - el.parentElement.getBoundingClientRect().top; dy = 0; t0 = Date.now(); el.style.transition = 'none'; }, { passive: true });
-  el.addEventListener('touchmove', (e) => { if (y0 == null) return; dy = e.touches[0].clientY - y0; el.style.transform = `translateY(${Math.max(0, base + dy)}px)`; }, { passive: true });
-  el.addEventListener('touchend', () => {
-    if (y0 == null) return; y0 = null; el.style.transition = ''; el.style.transform = '';
-    if (Math.abs(dy) < 8) return;
-    const v = dy / Math.max(1, Date.now() - t0); const order = ['full', 'half', 'peek']; let k = order.indexOf(mapSheet);
-    if (dy > 60 || v > 0.5) k = Math.min(2, k + (dy > 260 ? 2 : 1)); else if (dy < -60 || v < -0.5) k = Math.max(0, k - (dy < -260 ? 2 : 1));
-    mapSheet = order[k]; el.dataset.state = mapSheet; haptic(6);
-  });
-}
+function renderMapSheet() { const t = $('.mtop'); if (t) t.innerHTML = mapTopInner(); const c = $('.mcard'); if (c) { c.innerHTML = mapCardInner(); c.classList.toggle('on', !!c.innerHTML); } }
+function bindMapSheet() { /* the card has its own close button; tapping the map closes it */ }
 let mapDay = null, mapSel = null, meMarker = null;
 function mapStops() {
   if (typeof mapDay !== 'number') mapDay = curIdx();
@@ -664,13 +656,14 @@ function mountMap() {
   if (!window.L) { $('#leaflet').innerHTML = '<div class="section muted">המפה צריכה חיבור לאינטרנט.</div>'; return; }
   if (mapDay == null) mapDay = curIdx();
   map = L.map('leaflet', { zoomControl: false, attributionControl: false }).setView([41.39, 2.17], 13);
-  L.control.attribution({ position: 'topright', prefix: false }).addTo(map);
+  L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
   // Long press on the map: add a place right there
   map.on('contextmenu', (e) => addHereSheet(e.latlng.lat, e.latlng.lng));
+  map.on('click', () => { if (mapSel || mtOpen) { mapSel = null; mtOpen = null; drawMarkers(false); renderMapSheet(); } });
   let tileErrs = 0, tileOk = 0;
   const tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
   tl.on('tileload', () => { tileOk++; const n = $('#map-msg'); if (n) n.remove(); });
-  tl.on('tileerror', () => { tileErrs++; if (tileErrs === 4 && !tileOk && !$('#map-msg')) { const d = document.createElement('div'); d.id = 'map-msg'; d.className = 'warn'; d.style.cssText = 'position:absolute;top:70px;right:12px;left:12px;z-index:600'; d.textContent = 'רקע המפה לא נטען. בדוק חיבור לאינטרנט. העצירות והניווט עובדים גם בלי הרקע.'; $('.mapwrap').appendChild(d); } });
+  tl.on('tileerror', () => { tileErrs++; if (tileErrs === 4 && !tileOk && !$('#map-msg')) { const d = document.createElement('div'); d.id = 'map-msg'; d.className = 'warn'; d.style.cssText = 'position:absolute;top:150px;right:12px;left:12px;z-index:600'; d.textContent = 'רקע המפה לא נטען. בדוק חיבור לאינטרנט. העצירות והניווט עובדים גם בלי הרקע.'; $('.mapwrap').appendChild(d); } });
   setTimeout(() => map && map.invalidateSize(), 300);
   bindMapSheet();
   drawMarkers(true);
@@ -681,14 +674,14 @@ function drawMarkers(fit) {
   const line = [];
   pts.forEach((s, k) => {
     const icon = L.divIcon({ className: '', html: `<div class="mk" style="--c:${s.color};transform:rotate(${[-6, 5, -4, 6][k % 4]}deg)">${isLayer() ? ic(s.kind) : k + 1}</div>`, iconSize: [36, 36], iconAnchor: [18, 18] });
-    const mk = L.marker([s.lat, s.lng], { icon, title: s.name, draggable: !isLayer() && !s.hotelRef }).addTo(layer).on('click', () => { mapSel = s.id; if (mapSheet === 'peek') mapSheet = 'half'; renderMapSheet(); haptic(6); });
+    const mk = L.marker([s.lat, s.lng], { icon, title: s.name, draggable: !isLayer() && !s.hotelRef }).addTo(layer).on('click', () => { mapSel = s.id; mtOpen = null; drawMarkers(false); renderMapSheet(); haptic(6); });
     if (!isLayer()) mk.on('dragend', () => { const st = S.days[mapDay].stops.find((x) => x.id === s.id); if (!st) return; const old = { lat: st.lat, lng: st.lng }; const ll = mk.getLatLng(); st.lat = ll.lat; st.lng = ll.lng; delete st.details; delete st.osm; save(); drawMarkers(false); renderMapSheet(); haptic(10); toast(`${st.name} הוזז`, () => { st.lat = old.lat; st.lng = old.lng; save(); drawMarkers(false); renderMapSheet(); }); enrichStop(st, true); });
     line.push([s.lat, s.lng]);
   });
   if (line.length > 1) L.polyline(line, { color: pts[0].color, weight: 4, dashArray: '2 10', lineCap: 'round' }).addTo(layer);
   overlayItems().forEach((o) => {
     const icon = L.divIcon({ className: '', html: `<div class="mk ov ${o.id === mapSel ? 'sel' : ''}" style="--c:${o.color}">${ic(o.kind)}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
-    L.marker([o.lat, o.lng], { icon, title: o.name, zIndexOffset: -100 }).addTo(layer).on('click', () => { mapSel = o.id; if (mapSheet === 'peek') mapSheet = 'half'; drawMarkers(false); renderMapSheet(); haptic(6); });
+    L.marker([o.lat, o.lng], { icon, title: o.name, zIndexOffset: -100 }).addTo(layer).on('click', () => { mapSel = o.id; mtOpen = null; drawMarkers(false); renderMapSheet(); haptic(6); });
   });
   if (fit && line.length) map.fitBounds(line, { paddingTopLeft: [40, 40], paddingBottomRight: [40, 200], maxZoom: 15 });
 }
@@ -1699,6 +1692,7 @@ const A = {
     const ns = { id: uid(), kind: c.k || 'star', name, note: '', lat: c.lat, lng: c.lng, osm: c.osm };
     S.days[c.day].stops.push(ns); save(); closeSheet(); mapDay = c.day; mapSel = ns.id; drawMarkers(false); renderMapSheet(); toast(`נוסף ליום ${META[c.day].short}`); enrichStop(ns, true);
   },
+  mtOpen: (e) => { mtOpen = mtOpen === e.dataset.k ? null : e.dataset.k; renderMapSheet(); haptic(6); },
   msToggle: () => { mapSheet = mapSheet === 'peek' ? 'half' : 'peek'; const el = $('.msheet'); if (el) el.dataset.state = mapSheet; },
   mapLayer: (e) => { const k = e.dataset.k; if (mapLayers.has(k)) mapLayers.delete(k); else { mapLayers.add(k); if (k === 'gems') warmGems(); } mapSel = null; drawMarkers(false); renderMapSheet(); haptic(6); },
   mapAddOv: (e) => {
@@ -1708,7 +1702,7 @@ const A = {
     haptic(12);
   },
   mapGemNo: (e) => { const x = overlayItems().find((o) => o.id === e.dataset.id); if (!x || !x.gem) return; S.gems[x.gem] = 'no'; save(); mapSel = null; drawMarkers(false); renderMapSheet(); toast(`${cut(x.name, 24)} הוסתר`, () => { delete S.gems[x.gem]; save(); drawMarkers(false); renderMapSheet(); }); },
-  mapPick: (e) => { const x = mapStops().find((o) => o.id === e.dataset.id) || overlayItems().find((o) => o.id === e.dataset.id); if (!x) return; mapSel = x.id; mapSheet = 'half'; drawMarkers(false); renderMapSheet(); if (map) map.flyTo([x.lat, x.lng], Math.max(map.getZoom(), 16), { duration: 0.6 }); haptic(6); },
+  mapPick: (e) => { const x = mapStops().find((o) => o.id === e.dataset.id) || overlayItems().find((o) => o.id === e.dataset.id); if (!x) return; mapSel = x.id; mtOpen = null; drawMarkers(false); renderMapSheet(); if (map) map.flyTo([x.lat, x.lng], Math.max(map.getZoom(), 16), { duration: 0.6 }); haptic(6); },
   locate: () => {
     if (!navigator.geolocation) { toast('אין גישה למיקום'); return; }
     navigator.geolocation.getCurrentPosition((p) => { const ll = [p.coords.latitude, p.coords.longitude]; if (meMarker) meMarker.remove(); meMarker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="mk me"></div>', iconSize: [18, 18] }) }).addTo(map); map.setView(ll, 15); }, () => toast('לא קיבלתי הרשאה למיקום'));

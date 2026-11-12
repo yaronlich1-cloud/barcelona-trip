@@ -582,3 +582,32 @@ button.lnk { border: 0; background: none; font: inherit; cursor: pointer; paddin
 .ms-sel .row { align-items: center; } .ms-sel .gem-sc.big { font-size: 20px; }
 .tc > .tkind.tk-lg { height: 40px; min-height: 0; align-self: center; }
 .tc > .tkind.tk-lg svg { width: 22px !important; height: 22px !important; }
+/* v25: map = fixed light panel on top, info card from the bottom */
+.sheet-body > * { flex-shrink: 0; }
+.msheet { display: none; }
+.mtop { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 10px; right: 10px; z-index: 650; background: rgba(255,255,255,.9); -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4); border-radius: 20px; padding: 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 18px rgba(19,33,61,.12); max-width: 540px; margin: 0 auto; }
+.mt-days { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.mt-days button { border: 0; background: transparent; border-radius: 12px; padding: 3px 0; display: flex; align-items: baseline; justify-content: center; gap: 4px; color: var(--c); cursor: pointer; font: inherit; }
+.mt-days button b { font: 700 19px/1 var(--display); }
+.mt-days button span { font-size: 10px; font-weight: 700; color: var(--muted); }
+.mt-days button.on { background: color-mix(in srgb, var(--c) 14%, #fff); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 45%, #fff); }
+.mt-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 6px; }
+.mt-btn { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 7px 10px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer; text-align: right; }
+.mt-btn .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.mt-btn svg { width: 15px; height: 15px; flex: none; color: var(--muted); }
+.mt-btn .chev { color: var(--muted); font-size: 11px; }
+.mt-btn.on { background: var(--soft); }
+.mt-on { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; font-weight: 700; color: var(--muted); padding: 0 4px; }
+.mt-on span { display: inline-flex; align-items: center; gap: 4px; }
+.mt-on i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.mt-panel { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px; animation: rise .25s var(--ease) both; }
+.mt-panel > * { flex-shrink: 0; }
+.mt-panel .list { box-shadow: none; border: 1px solid var(--line); }
+.mcard { position: absolute; left: 10px; right: 10px; bottom: calc(88px + env(safe-area-inset-bottom)); z-index: 640; max-height: 56vh; overflow-y: auto; border-radius: 22px; background: #fff; box-shadow: 0 -4px 30px rgba(19,33,61,.18); display: none; max-width: 540px; margin: 0 auto; }
+.mcard.on { display: block; animation: sheetIn .36s var(--spring) both; }
+.mcard .ms-sel { background: #fff; border: 0; padding: 14px; }
+.map-loc { top: auto; bottom: calc(96px + env(safe-area-inset-bottom)); left: 12px; }
+body:has(.mcard.on) .map-loc { display: none; }
+.leaflet-bottom.leaflet-left { bottom: calc(80px + env(safe-area-inset-bottom)); }
+.leaflet-control-attribution { margin: 0 0 4px 6px !important; }
+.ms-sel .gem-sc.big { align-self: center !important; flex: none; line-height: 1; }
