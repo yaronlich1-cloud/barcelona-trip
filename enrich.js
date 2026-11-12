@@ -2,7 +2,7 @@
 // OpenStreetMap (Overpass) for type, hours, diet tags, website and phone; Wikidata + Wikipedia for the article and photos.
 window.Enrich = (() => {
   'use strict';
-  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass-api.de/api/interpreter'];
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
   const getJSON = async (url, tries = 2, timeout = 12000) => {
     for (let i = 0; ; i++) {
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeout);
@@ -259,17 +259,19 @@ window.Enrich = (() => {
 
   /* ---------- live recommendations around a point (OpenStreetMap) ---------- */
   const NEAR_Q = {
-    eat: (a) => `nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:vegan"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:gluten_free"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe)$"]["cuisine"~"vegan"];`,
+    eat: (a) => `nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:vegan"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:gluten_free"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe)$"]["cuisine"~"vegan|vegetarian"];nwr(${a})["amenity"~"^(restaurant|cafe)$"]["diet:vegetarian"~"^(only)$"];`,
     drink: (a) => `nwr(${a})["amenity"~"^(bar|pub|biergarten)$"]["name"];nwr(${a})["amenity"="cafe"]["cuisine"~"coffee"]["name"];`,
     shop: (a) => `nwr(${a})["shop"~"^(clothes|shoes|department_store|fashion_accessories)$"]["brand"~"Zara|Mango|Uniqlo|Pull&Bear|Bershka|Massimo Dutti|Stradivarius|Oysho|H&M|Primark|Corte Ingl|Desigual|COS|Lefties",i];nwr(${a})["shop"~"^(clothes|department_store)$"]["name"~"Zara|Mango|Uniqlo|Pull&Bear|Massimo Dutti|Primark|Corte Ingl",i];`,
     see: (a) => `nwr(${a})["tourism"~"^(attraction|museum|viewpoint|gallery)$"]["name"];nwr(${a})["historic"~"^(monument|castle|church|palace|archaeological_site)$"]["name"];nwr(${a})["leisure"~"^(park|garden)$"]["name"]["wikidata"];nwr(${a})["amenity"="marketplace"]["name"];`
   };
-  async function nearby(cat, lat, lng, radius) {
-    const a = `around:${radius || 900},${lat},${lng}`;
-    const q = `[out:json][timeout:20];(${NEAR_Q[cat](a)});out tags center 80;`;
+  // pts: one point, or the stops of a day (searched along the whole route)
+  async function nearby(cat, pts, radius) {
+    if (!Array.isArray(pts)) pts = [pts];
+    const a = `around:${radius || 700},${pts.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join(',')}`;
+    const q = `[out:json][timeout:20];(${NEAR_Q[cat](a)});out tags center 90;`;
     let d = null;
-    for (const host of OVERPASS) { try { d = await getJSON(`${host}?data=${encodeURIComponent(q)}`, 1, 15000); break; } catch (err) { /* next server */ } }
-    if (!d) throw new Error('overpass unavailable');
+    for (const host of OVERPASS) { try { d = await getJSON(`${host}?data=${encodeURIComponent(q)}`, 1, 10000); break; } catch (err) { /* next server */ } }
+    if (!d) return photonNearby(cat, pts, radius);
     const seen = new Set(); const out = [];
     (d.elements || []).forEach((el) => {
       const t = el.tags || {}; const name = t.name || t['name:en']; if (!name) return;
@@ -283,6 +285,25 @@ window.Enrich = (() => {
         hasWiki: !!(t.wikidata || t.wikipedia)
       });
     });
+    return out;
+  }
+  // Fallback when no OpenStreetMap server answers: Photon finds places by type around each stop (no diet or hours data).
+  const PH_TAGS = { eat: ['amenity:restaurant', 'amenity:cafe', 'amenity:fast_food'], drink: ['amenity:bar', 'amenity:pub'], see: ['tourism:museum', 'tourism:attraction', 'tourism:viewpoint', 'historic:monument', 'tourism:gallery'], shop: ['shop:clothes', 'shop:department_store', 'shop:shoes'] };
+  async function photonNearby(cat, pts, radius) {
+    const out = []; const seen = new Set(); let ok = 0;
+    for (const p of pts.slice(0, 5)) {
+      try {
+        const d = await getJSON(`https://photon.komoot.io/reverse?lat=${p.lat}&lon=${p.lng}&radius=${Math.min(1.5, (radius || 700) / 1000)}&limit=25&${PH_TAGS[cat].map((t) => 'osm_tag=' + t).join('&')}`, 1, 10000);
+        ok++;
+        (d.features || []).forEach((f) => {
+          const pr = f.properties || {}; if (!pr.name) return;
+          if (cat === 'shop' && !/zara|mango|uniqlo|pull|bershka|massimo|stradivarius|oysho|h&m|primark|corte ingl|desigual|cos\b|lefties/i.test(pr.name)) return;
+          const k = norm(pr.name); if (seen.has(k)) return; seen.add(k);
+          out.push({ id: 'p' + (pr.osm_type || 'x')[0] + pr.osm_id, name: pr.name, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], osm: pr.osm_id ? { type: OSM_TYPE[pr.osm_type] || pr.osm_type, id: pr.osm_id } : null, kind: kindFrom(pr.osm_key, pr.osm_value) || 'star', what: pr.osm_value || '', brand: '', details: { at: 0, partial: true }, noDiet: cat === 'eat', src: 'photon' });
+        });
+      } catch (e) { /* try the next stop */ }
+    }
+    if (!ok) throw new Error('search unavailable');
     return out;
   }
   // Wikipedia articles about places around a point: Hebrew first, then English
@@ -325,5 +346,5 @@ window.Enrich = (() => {
     return out;
   }
 
-  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear, openAt, nearby, wikiNearby };
+  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear, openAt, nearby, wikiNearby, cityNow };
 })();

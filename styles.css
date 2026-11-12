@@ -163,3 +163,72 @@ button > svg, a > svg, .card > svg { width: 20px; height: 20px; flex: none; }
 .dcard p { margin: 0 0 10px; }
 .dcard:fullscreen, .dcard.full { position: fixed; inset: 0; z-index: 3000; border-radius: 0; font-size: 30px; padding: 32px; overflow: auto; display: flex; flex-direction: column; justify-content: center; }
 input[type=checkbox] { accent-color: var(--teal); }
+/* ---------- v17: lighter, calmer look ---------- */
+svg { stroke-width: 1.8; }
+.tile { width: 36px; height: 36px; border-radius: 11px; background: color-mix(in srgb, var(--c, var(--day)) 13%, #fff); color: var(--c, var(--day)); position: relative; }
+.tile svg { width: 18px; height: 18px; }
+.tile.r1, .tile.r2, .tile.r3, .tile.r4 { transform: none; }
+.tile i { position: absolute; top: -6px; inset-inline-end: -6px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--c, var(--day)); color: #fff; font: 800 10px/18px var(--body); text-align: center; font-style: normal; padding: 0 4px; border: 2px solid #fff; box-sizing: content-box; }
+.icon-btn { width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid var(--line); }
+.icon-btn svg { width: 17px; height: 17px; }
+.icon-btn.danger { background: #fff; border-color: #F4CFC8; }
+.card { border-radius: 16px; box-shadow: 0 1px 6px rgba(19,33,61,.06); }
+.btn { border-radius: 14px; font-weight: 700; }
+.pill { border-width: 1.5px; padding: 5px 12px; font-size: 13px; font-weight: 700; }
+.pills { flex-wrap: wrap; }
+.map-top .pills { flex-wrap: nowrap; }
+.badge { border-width: 1px; font-weight: 700; }
+
+/* today */
+.next { margin: 12px 20px 0; padding: 14px 16px; gap: 10px; border-radius: 22px 22px 22px 8px; }
+.next .name { font-size: 20px; }
+.alert { display: flex; gap: 8px; align-items: center; background: #FFF6E8; color: #7A4A00; border-radius: 12px; padding: 8px 10px; font-size: 13px; text-decoration: none; }
+.alert svg { width: 16px; height: 16px; flex: none; }
+.alert.info { background: #EEF2FA; color: var(--navy); }
+.mini { border: 0; background: rgba(255,255,255,.85); color: inherit; border-radius: 99px; padding: 4px 10px; font: 700 12px var(--body); flex: none; cursor: pointer; text-decoration: none; }
+.mini.solid { background: var(--sun); color: var(--navy); }
+.ideas { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 10px 12px; text-align: right; cursor: pointer; font: inherit; color: inherit; }
+.ideas b { display: block; font-size: 14px; }
+.ideas .chev { font-size: 22px; color: var(--muted); }
+.chipbtn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: #fff; color: var(--navy); border-radius: 99px; padding: 6px 11px; font: 700 12px var(--body); text-decoration: none; cursor: pointer; flex: none; }
+.chipbtn svg { width: 14px; height: 14px; }
+.chipbtn.on { border-color: var(--teal); color: #137A6E; background: #E6F6F3; }
+.timebar { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.timebar input { border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; font: 700 14px var(--body); color: var(--navy); background: #fff; }
+.stop { gap: 12px; padding: 12px; }
+.stop .t { font-size: 15px; }
+.stop.closed { box-shadow: 0 0 0 1.5px #F5B26B; }
+.tl { gap: 4px; margin-top: 4px; font-size: 11.5px; }
+.tl > span { padding: 1px 6px; background: var(--soft); }
+.leg { margin-right: 17px; border-right: 2px dotted color-mix(in srgb, var(--day) 55%, #fff); padding: 4px 14px 4px 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lg { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: #fff; color: var(--muted); border-radius: 99px; padding: 3px 9px; font: 700 11.5px var(--body); cursor: pointer; }
+.lg svg { width: 14px; height: 14px; }
+.lg.on { border-color: var(--day); color: var(--day); background: color-mix(in srgb, var(--day) 9%, #fff); }
+.lg-go { margin-inline-start: auto; font: 700 12px var(--body); color: var(--day); text-decoration: none; }
+.fab { border-width: 2px; border-radius: 18px 18px 18px 6px; font-size: 15px; padding: 10px 16px; }
+
+/* lists (recommendations) */
+.list { background: #fff; border-radius: 16px; box-shadow: 0 1px 6px rgba(19,33,61,.06); overflow: hidden; }
+.li { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); }
+.li:first-child { border-top: 0; }
+.li-main { text-decoration: none; color: inherit; min-width: 0; }
+.li-t { font-weight: 700; font-size: 14px; }
+.li-m { font-size: 12px; color: var(--muted); }
+.li-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.tg.ok { color: #137A6E; } .tg.no { color: #C4462F; } .tg.mut { font-weight: 500; }
+.li .thumb { width: 40px; height: 40px; border-radius: 10px; }
+.add { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--navy); display: inline-flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
+.add svg { width: 16px; height: 16px; }
+.li-done { font-size: 11px; font-weight: 800; color: #137A6E; flex: none; }
+.cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.selrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.selrow select.field { padding: 8px 10px; font-size: 14px; border-width: 1px; background: #fff; }
+.selrow label:only-child { grid-column: 1 / -1; }
+
+/* more: light tools */
+.tool { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 16px; padding: 12px; text-decoration: none; color: var(--navy); box-shadow: 0 1px 6px rgba(19,33,61,.06); min-width: 0; }
+.tool b { display: block; font-size: 14px; }
+.tool .grow > span { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid2 { gap: 10px; }
+.big { min-height: 80px; border-radius: 18px; }
+.big b { font-family: var(--body); font-size: 22px; }
