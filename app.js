@@ -88,7 +88,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '22 · 12.11';
+const VERSION = '23 · 12.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -702,7 +702,7 @@ function liveView() {
 }
 
 /* gems: places most visitors miss, one card at a time */
-let discTop = (() => { try { return sessionStorage.getItem('bcn.disc') || 'gems'; } catch (e) { return 'gems'; } })(), gemCat = 'all', gemView = 'deck', gemDayF = null, gemImgs = {}, gemPv = {}, gemsWarm = false, voyageItems = null, voyageState = '';
+let gemCat = 'all', gemView = 'deck', gemDayF = null, gemImgs = {}, gemPv = {}, gemsWarm = false, voyageItems = null, voyageState = '';
 const WV_HE = (() => { try { return JSON.parse(localStorage.getItem('bcn.wvhe') || '{}'); } catch (e) { return {}; } })();
 function wvCat(t) {
   t = t.toLowerCase();
@@ -720,8 +720,24 @@ function voyageGems() {
   const known = [...window.GEMS, ...allStops().map((o) => o.st).filter(hasGeo)];
   return voyageItems.filter((v) => !known.some((k) => km(k, v) < 0.12 || normName(k.name) === normName(v.name))).map((v) => {
     const c = wvCat(v.name + ' ' + v.content);
-    return { id: 'wv' + normName(v.name).replace(/\s+/g, '').slice(0, 24), name: v.name, he: v.alt || '', cat: [c], kind: CAT_KIND[c], lat: v.lat, lng: v.lng, area: v.district, score: null, crowd: null, dur: '', price: v.price, best: v.hours, wiki: v.wiki, bg: v.content, go: '', skip: '', wv: true, url: v.url };
+    return { id: 'wv' + normName(v.name).replace(/\s+/g, '').slice(0, 24), name: v.name, he: v.alt || '', cat: [c], kind: CAT_KIND[c], lat: v.lat, lng: v.lng, area: DISTRICT_HE[v.district] || v.district, score: null, crowd: null, dur: '', price: v.price, best: v.hours, wiki: v.wiki, bg: v.content, go: '', skip: '', wv: true, url: v.url, page: v.page };
   });
+}
+const DISTRICT_HE = { 'Ciutat Vella': 'העיר העתיקה', Eixample: 'אישאמפלה', 'Gràcia': 'גרסיה', 'Sants-Montjuïc': 'סנטס ומונז׳ואיק', 'Sant Martí': 'סנט מרטי', 'Horta-Guinardó': 'אורטה וגינרדו', 'Les Corts': 'לס קורטס', 'Sarrià-Sant Gervasi': 'סריה וסנט ז׳רווסי', 'Nou Barris': 'נואו באריס', 'Sant Andreu': 'סנט אנדראו', Barcelona: 'ברצלונה' };
+// How well known: yearly Wikipedia readers on a 1–5 scale
+const popLevel = (n) => (n == null ? 0 : n < 5000 ? 1 : n < 20000 ? 2 : n < 80000 ? 3 : n < 300000 ? 4 : 5);
+const popDots = (n) => { const l = popLevel(n); return l ? `<span class="pop" title="${fmtPv(n)} קוראים בשנה">כמה מוכר <i>${'●'.repeat(l)}<s>${'●'.repeat(5 - l)}</s></i></span>` : ''; };
+let gemPhotos = (() => { try { return JSON.parse(localStorage.getItem('bcn.gph') || '{}'); } catch (e) { return {}; } })();
+// A photo for a place with no Wikipedia article: Commons photos taken at the spot
+function gemImg(g) {
+  const w = g.wiki ? gemImgs[g.wiki] : ''; if (w) return w;
+  if (g.id in gemPhotos) return gemPhotos[g.id];
+  if (window.Enrich && !gemImg.busy && (!g.wiki || g.wiki in gemImgs)) {
+    gemImg.busy = true;
+    Enrich.photosNear({ lat: g.lat, lng: g.lng, name: g.name }).then((ph) => { gemPhotos[g.id] = ph[0] || ''; try { localStorage.setItem('bcn.gph', JSON.stringify(gemPhotos)); } catch (e) { /* full */ } })
+      .catch(() => {}).finally(() => { gemImg.busy = false; gemRefresh(); });
+  }
+  return '';
 }
 const allGems = () => [...window.GEMS, ...voyageGems()];
 const gemById = (id) => allGems().find((g) => g.id === id);
@@ -743,20 +759,24 @@ function warmGems() {
   setTimeout(loadVoyage, 1500);
 }
 let gemDragging = false;
-function gemRefresh() { if (gemDragging) return; if (location.hash === '#discover' && discTop === 'gems') render(); }
+function gemRefresh() { if (gemDragging) return; if (location.hash === '#discover') render(); }
 const fmtPv = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} מיליון` : n >= 1000 ? `${Math.round(n / 1000)} אלף` : String(n));
 function gemTags(g) {
   const pv = g.wiki ? gemPv[g.wiki] : null; const t = [];
-  const hidden = g.wv ? pv != null && pv < 40000 : g.crowd === 1 && (pv == null || pv < 150000);
+  const hidden = g.wv ? popLevel(pv) && popLevel(pv) <= 2 : g.crowd === 1 && popLevel(pv) <= 3;
   if (hidden) t.push('<span class="tg gemt">💎 פנינה נסתרת</span>');
-  if (g.crowd === 3 || (pv != null && pv > 600000)) t.push('<span class="tg mut">עמוס בתיירים</span>');
+  if (g.crowd === 3 || popLevel(pv) === 5) t.push('<span class="tg mut">עמוס בתיירים</span>');
   if (/חינם/.test(g.price || '') && !/€/.test((g.price || '').split(',')[0])) t.push('<span class="tg ok">חינם</span>');
   return t.join('');
 }
 function gemRank(g) { const n = gemNear(g); const d = n ? n.d : 5; return g.wv ? -10 + Math.log10((gemPv[g.wiki] || 10)) - d * 0.3 : g.score - Math.min(d, 6) * 0.07; }
 function gemQueue() {
-  return allGems().filter((g) => !S.gems[g.id] && (gemCat === 'all' || g.cat.includes(gemCat)) && (gemDayF == null || ((n) => n && n.di === gemDayF && n.d < 1.5)(gemNear(g))))
+  const list = allGems().filter((g) => !S.gems[g.id] && (gemCat === 'all' || (gemCat === 'wv' ? g.wv : g.cat.includes(gemCat))) && (gemDayF == null || ((n) => n && n.di === gemDayF && n.d < 1.5)(gemNear(g))))
     .sort((a, b) => gemRank(b) - gemRank(a));
+  // Mix: after every 3 of ours, one from Wikivoyage, so both show up early
+  const ours = list.filter((g) => !g.wv), wv = list.filter((g) => g.wv); const out = [];
+  while (ours.length || wv.length) { out.push(...ours.splice(0, 3)); if (wv.length) out.push(wv.shift()); }
+  return out;
 }
 function gemRec(g) {
   return reg({ id: 'g_' + g.id, name: g.name, nameHe: g.he, kind: g.kind, lat: g.lat, lng: g.lng, what: '', note: g.area, gem: g.id, thumb: gemImgs[g.wiki] || '', wikiFixed: g.wiki ? { lang: 'en', title: decodeURIComponent(g.wiki).replace(/_/g, ' '), needsHe: true } : undefined });
@@ -771,40 +791,44 @@ function gemFacts(g) {
   const f = [];
   if (g.dur) f.push(`<span>${ic('clock')}${esc(g.dur)}</span>`);
   if (g.price) f.push(`<span>${ic('coin')}${esc(cut(g.price, 60))}</span>`);
-  if (g.best) f.push(`<span>${ic('sun')}${esc(cut(g.best, 60))}</span>`);
+  if (g.best) f.push(`<span>${ic(g.wv ? 'clock' : 'sun')}${g.wv ? 'שעות: ' : ''}${esc(cut(g.best, 70))}</span>`);
   return f.length ? `<div class="gem-facts">${f.join('')}</div>` : '';
 }
 function gemCard(g) {
-  const n = gemNear(g); const img = g.wiki ? gemImgs[g.wiki] : ''; const pv = g.wiki ? gemPv[g.wiki] : null;
-  return `<article class="gem" id="gemcard" data-id="${g.id}">
+  const n = gemNear(g); const img = gemImg(g); const pv = g.wiki ? gemPv[g.wiki] : null;
+  return `<article class="gem${g.wv ? ' wvc' : ''}" id="gemcard" data-id="${g.id}">
     <div class="gem-ph ${img ? '' : 'noimg'}">${img ? `<img src="${esc(img)}" alt="${esc(g.name)}">` : `<span class="gem-ic">${ic(g.kind)}</span>`}
-      ${g.score ? `<span class="gem-score"><b>${g.score.toFixed(1)}</b><small>הציון שלנו</small></span>` : '<span class="gem-score wv"><small>מ־Wikivoyage</small></span>'}
+      ${g.score ? `<span class="gem-score"><b>${g.score.toFixed(1)}</b><small>הציון שלנו</small></span>` : '<span class="gem-src">🌍 מ־Wikivoyage<small>מדריך הטיולים הפתוח</small></span>'}
       <span class="gem-yes">שמור ★</span><span class="gem-no">לא בשבילי</span></div>
     <div class="gem-b">
       <h3>${esc(g.name)}</h3>${g.he && g.he !== g.name ? `<div class="gem-he">${esc(g.he)}</div>` : ''}
       <div class="gem-near">${ic('pin')}${esc(g.area)}${n ? ` · ${fmtKm(n.d)} מ${esc(cut(n.s.name, 22))} (יום ${META[n.di].short})` : ''}</div>
-      <div class="li-tags">${gemTags(g)}</div>
+      <div class="li-tags">${gemTags(g)}${popDots(pv)}</div>
+      ${g.wv ? `<div class="gem-lbl">${WV_HE[g.id] ? 'מה כתוב עליו ב־Wikivoyage (תורגם)' : 'מה כתוב עליו ב־Wikivoyage · מתרגם…'}</div>` : ''}
       <p class="gem-bg">${esc(gemBg(g))}</p>
       ${g.go ? `<div class="gem-why"><b>למה ללכת</b>${esc(g.go)}</div>` : ''}
       ${g.skip ? `<div class="gem-skip"><b>פחות מתאים</b>${esc(g.skip)}</div>` : ''}
       ${gemFacts(g)}
-      <div class="row"><span class="muted grow" style="font-size:12px">${pv ? `${fmtPv(pv)} קוראים בוויקיפדיה בשנה` : ''}</span><a class="lnk" href="#place/r/g_${g.id}" data-act="gemOpen" data-id="${g.id}">עוד על המקום ←</a></div>
+      <div class="row"><span class="grow">${g.wv && g.page ? `<a class="lnk muted" href="https://en.wikivoyage.org/wiki/${encodeURIComponent(g.page.replace(/ /g, '_'))}" target="_blank" rel="noopener">המקור ←</a>` : ''}</span><a class="lnk" href="#place/r/g_${g.id}" data-act="gemOpen" data-id="${g.id}">עוד על המקום ←</a></div>
     </div>
     <div class="gem-acts"><button class="gx" data-act="gemNo" data-id="${g.id}">✕<span>לא בשבילי</span></button><button class="gs" data-act="gemSave" data-id="${g.id}">★<span>שמור</span></button><button class="gd" data-act="gemDay" data-id="${g.id}" data-d="${n ? n.di : curIdx()}">+<span>ליום ${META[n ? n.di : curIdx()].short}</span></button></div>
   </article>`;
 }
 function gemRow(g) {
-  const n = gemNear(g); const img = g.wiki ? gemImgs[g.wiki] : ''; const r = gemRec(g); const st = inRoute(r);
+  const n = gemNear(g); const img = g.wiki ? gemImgs[g.wiki] : gemPhotos[g.id] || ''; const r = gemRec(g); const st = inRoute(r);
   return `<div class="li">${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">` : `<span class="tile" style="--c:#2453C9">${ic(g.kind)}</span>`}
-    <a class="grow li-main" href="#place/r/g_${g.id}" data-act="gemOpen" data-id="${g.id}"><div class="li-t">${esc(g.name)}</div><div class="li-m">${g.score ? `<b class="gem-sc">${g.score.toFixed(1)}</b> · ` : ''}${n ? `ליד יום ${META[n.di].short} · ${fmtKm(n.d)}` : esc(g.area)}</div><div class="li-tags">${gemTags(g)}</div></a>
+    <a class="grow li-main" href="#place/r/g_${g.id}" data-act="gemOpen" data-id="${g.id}"><div class="li-t">${esc(g.name)}</div><div class="li-m">${g.score ? `<b class="gem-sc">${g.score.toFixed(1)}</b> · ` : '🌍 Wikivoyage · '}${n ? `ליד יום ${META[n.di].short} · ${fmtKm(n.d)}` : esc(g.area)}</div><div class="li-tags">${gemTags(g)}</div></a>
     ${st ? `<span class="li-done">✓ ${META[st.di].short}</span>` : `<button class="add" data-act="recAdd" data-id="g_${g.id}" aria-label="הוסף למסלול">${ic('plus')}</button>`}</div>`;
 }
 function gemsView() {
   warmGems();
   const q = gemQueue(); const dec = Object.entries(S.gems); const yes = dec.filter((x) => x[1] === 'yes').length; const no = dec.length - yes;
-  const head = `<div class="cats">${window.GEM_CATS.map(([k, t]) => `<button class="pill ${k === gemCat ? 'on' : ''}" style="--c:#2453C9" data-act="gemCat" data-t="${k}">${t}</button>`).join('')}</div>
+  const nWv = voyageGems().filter((g) => !S.gems[g.id]).length;
+  const wvPill = `<button class="pill wvp ${gemCat === 'wv' ? 'on' : ''}" style="--c:#1E9E8F" data-act="gemCat" data-t="wv">🌍 ${voyageState === 'ok' ? `עוד ${nWv} ` : 'עוד '}מ־Wikivoyage${voyageState === 'loading' ? ' (טוען…)' : ''}</button>`;
+  const head = `<div class="cats">${window.GEM_CATS.map(([k, t]) => `<button class="pill ${k === gemCat ? 'on' : ''}" style="--c:#2453C9" data-act="gemCat" data-t="${k}">${t}</button>`).join('')}${wvPill}</div>
+    ${gemCat === 'wv' ? `<div class="card wv-note">${voyageState === 'err' ? 'Wikivoyage לא ענה כרגע (צריך אינטרנט). <button class="lnk" data-act="wvRetry">לנסות שוב</button>' : voyageState === 'loading' ? 'טוען מקומות מ־Wikivoyage…' : 'מקומות ש־Wikivoyage, מדריך הטיולים הפתוח, ממליץ עליהם בכל שכונה. אין להם ציון שלנו: לידם מופיע כמה הם מוכרים, לפי מספר הקוראים בוויקיפדיה. התיאור מתורגם אוטומטית.'}</div>` : ''}
     ${gemDayF != null ? `<div class="herebar">${ic('pin')}<span class="grow">רק ליד המסלול של יום ${META[gemDayF].short}</span><button class="chipbtn" data-act="gemDayF">הצג הכל ✕</button></div>` : ''}
-    <div class="row"><span class="muted grow">${q.length ? `${q.length} לגלות` : 'עברת על הכל'}${yes ? ` · שמרת ${yes}` : ''}${voyageState === 'loading' ? ' · טוען עוד מ־Wikivoyage…' : ''}</span><button class="chipbtn" data-act="gemView">${gemView === 'deck' ? `${ic('list')}רשימה` : `${ic('star')}כרטיסים`}</button></div>`;
+    <div class="row"><span class="muted grow">${q.length ? `${q.length} לגלות` : 'עברת על הכל'}${yes ? ` · שמרת ${yes}` : ''}</span><button class="chipbtn" data-act="gemView">${gemView === 'deck' ? `${ic('list')}רשימה` : `${ic('star')}כרטיסים`}</button></div>`;
   let body;
   if (!q.length) body = `<div class="card gem-end"><b>אין עוד פנינים כאן</b><span class="muted">${gemCat !== 'all' || gemDayF != null ? 'נסה קטגוריה אחרת או את כל העיר.' : 'עברת על כל הרשימה.'}</span>${no ? `<button class="btn soft sm" data-act="gemReset">להחזיר את ${no} שדילגתי עליהם</button>` : ''}${yes ? '<a class="btn soft sm" href="#saved">לשמורים ★</a>' : ''}</div>`;
   else if (gemView === 'list') body = recList(q.map(gemRow));
@@ -814,7 +838,7 @@ function gemsView() {
 }
 function gemBlock(s) {
   const g = s.gem && gemById(s.gem); if (!g) return '';
-  return `<div class="card gem-info">${g.score ? `<div class="row"><span class="gem-sc big">${g.score.toFixed(1)}</span><span class="grow"><b>הציון שלנו</b><div class="li-tags">${gemTags(g)}</div></span></div>` : `<div class="li-tags">${gemTags(g)}<span class="tg">מ־Wikivoyage</span></div>`}
+  return `<div class="card gem-info">${g.score ? `<div class="row"><span class="gem-sc big">${g.score.toFixed(1)}</span><span class="grow"><b>הציון שלנו</b><div class="li-tags">${gemTags(g)}${popDots(g.wiki ? gemPv[g.wiki] : null)}</div></span></div>` : `<div class="li-tags"><span class="tg">🌍 מ־Wikivoyage</span>${gemTags(g)}${popDots(g.wiki ? gemPv[g.wiki] : null)}</div>`}
     <p class="gem-bg">${esc(gemBg(g))}</p>${g.go ? `<div class="gem-why"><b>למה ללכת</b>${esc(g.go)}</div>` : ''}${g.skip ? `<div class="gem-skip"><b>פחות מתאים</b>${esc(g.skip)}</div>` : ''}${gemFacts(g)}${g.url ? `<a class="lnk" href="${esc(g.url)}" target="_blank" rel="noopener">האתר הרשמי ←</a>` : ''}</div>`;
 }
 function gemDecide(id, v, el) {
@@ -838,7 +862,7 @@ function bindGemSwipe() {
   };
   c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
 }
-V.discover = () => pageHead('גלה את העיר', discTop === 'gems' ? 'מקומות שכדאי להכיר, עם ציון ורקע להחלטה' : 'חיפוש חי לפי מיקום ושעה') + `<div class="section"><div class="seg" style="--c:#2453C9"><button class="${discTop === 'gems' ? 'on' : ''}" data-act="discTop" data-t="gems">💎 פנינים</button><button class="${discTop === 'live' ? 'on' : ''}" data-act="discTop" data-t="live">${ic('locate')} חיפוש חי</button></div>${discTop === 'gems' ? gemsView() : liveView()}</div>`;
+V.discover = () => pageHead('גלה את העיר', 'מקומות שכדאי להכיר, עם ציון ורקע להחלטה') + `<div class="section">${gemsView()}</div>`;
 
 /* saved */
 function linkedStop(x) { for (let k = 0; k < S.days.length; k++) { const st = S.days[k].stops.find((s) => (s.savedId && s.savedId === x.id) || (x.url && s.url === x.url)); if (st) return { di: k, st }; } return null; }
@@ -1574,13 +1598,13 @@ const A = {
     sheet(`<h3>רעיונות להיום</h3><span class="muted">${META[i].short} ${META[i].num}.12 · לפי השעה, מזג האוויר ומה ששמרת</span>
       ${D.evs.length ? `<h2>קורה היום ליד המסלול</h2>${recList(D.evs.map(({ e: ev, d }) => recRow({ r: evRec(ev), d: 0, o: null }, 0, { why: `${ev.he} · ${ev.hours}${ev.approx ? ' · תאריכים משוערים' : ''} · ${fmtKm(d)}`, color: '#D99400', day: i })))}` : ''}
       ${D.recs.length ? `<h2>המלצות</h2>${recList(D.recs.map((o, n) => recRow({ r: o.r, d: 0, o: openState(o.r) }, n, { why: o.why, color: o.color, day: i })))}` : ''}
-      <button class="btn soft" data-act="liveFrom" data-d="${i}" data-id="all">עוד המלצות לאורך המסלול ›</button>`);
+      <button class="btn soft" data-act="liveFrom" data-d="${i}" data-id="all">💎 פנינים ליד המסלול ›</button>`);
   },
-  discTop: (e) => { discTop = e.dataset.t; try { sessionStorage.setItem('bcn.disc', discTop); } catch (err) { /* private */ } withTransition('tab', render); },
   gemCat: (e) => { gemCat = e.dataset.t; withTransition('tab', render); },
+  wvRetry: () => { voyageState = ''; loadVoyage(); render(); },
   gemView: () => { gemView = gemView === 'deck' ? 'list' : 'deck'; withTransition('tab', render); },
   gemDayF: () => { gemDayF = null; withTransition('tab', render); },
-  gemDays: (e) => { discTop = 'gems'; gemDayF = +e.dataset.d; gemCat = 'all'; location.hash = '#discover'; },
+  gemDays: (e) => { closeSheet(); gemDayF = +e.dataset.d; gemCat = 'all'; location.hash = '#discover'; },
   gemReset: () => { const old = { ...S.gems }; Object.keys(S.gems).forEach((k) => { if (S.gems[k] === 'no') delete S.gems[k]; }); save(); render(); toast('הוחזרו לרשימה', () => { S.gems = old; save(); render(); }); },
   gemOpen: (e) => { const g = gemById(e.dataset.id); if (!g) return; gemRec(g); location.hash = '#place/r/g_' + g.id; },
   gemNo: (e) => { const g = gemById(e.dataset.id); if (!g) return; gemDecide(g.id, 'no'); toast(`דילגת על ${cut(g.name, 26)}`, () => { delete S.gems[g.id]; save(); render(); }); },
@@ -1598,7 +1622,7 @@ const A = {
     toast(`נוסף ליום ${META[di].short} · במסלול ובמפה`, () => { S.days[di].stops = S.days[di].stops.filter((o) => o.id !== ns.id); delete S.gems[g.id]; save(); render(); });
     enrichStop(ns, true);
   },
-  liveFrom: (e) => { discTop = 'live'; discMode = 'live'; liveDay = e.dataset.d != null ? +e.dataset.d : curIdx(); livePlace = e.dataset.id || 'all'; closeSheet(); if (location.hash === '#discover') render(); else location.hash = '#discover'; },
+  liveFrom: (e) => { gemDayF = e.dataset.d != null ? +e.dataset.d : curIdx(); gemCat = 'all'; closeSheet(); if (location.hash === '#discover') render(); else location.hash = '#discover'; },
   recSave: (e) => { const r = REC[e.dataset.id]; if (r) saveRec(r); },
   recAdd: (e) => {
     const r = REC[e.dataset.id]; if (!r) return;

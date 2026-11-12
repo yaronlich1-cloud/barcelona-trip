@@ -388,7 +388,7 @@ window.Enrich = (() => {
   }
   const plain = (t) => String(t || '').replace(/\{\{[^{}]*\}\}/g, '').replace(/\[\[(?:[^|\]]*\|)?([^\]]+)\]\]/g, '$1').replace(/\[https?:\S+\s([^\]]+)\]/g, '$1').replace(/'{2,}/g, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
   async function voyage() {
-    const key = 'bcn.wv';
+    const key = 'bcn.wv2';
     try { const c = JSON.parse(localStorage.getItem(key) || 'null'); if (c && Date.now() - c.at < 7 * 864e5 && c.items.length) return c.items; } catch (e) { /* none */ }
     const ps = await getJSON(`${WV}?action=query&list=prefixsearch&pssearch=Barcelona/&psnamespace=0&pslimit=40&format=json&origin=*`, 2, 12000);
     const titles = ['Barcelona', ...((ps.query || {}).prefixsearch || []).map((x) => x.title)].slice(0, 45);
@@ -402,9 +402,9 @@ window.Enrich = (() => {
         if (!['see', 'do'].includes(type)) return;
         const lat = parseFloat(p.lat), lng = parseFloat(p.long || p.lon);
         const name = plain(p.name); const content = plain(p.content || p.description);
-        if (!name || !content || !(lat > 41.2 && lat < 41.6 && lng > 1.9 && lng < 2.4) || seen.has(norm(name))) return;
+        if (!name || !content || content.length < 50 || !(lat > 41.2 && lat < 41.6 && lng > 1.9 && lng < 2.4) || seen.has(norm(name))) return;
         seen.add(norm(name));
-        items.push({ name, alt: plain(p.alt), lat, lng, content: cut(content, 600), hours: plain(p.hours), price: plain(p.price), url: p.url || '', wiki: (p.wikipedia || '').replace(/ /g, '_'), wikidata: p.wikidata || '', type, district });
+        items.push({ name, alt: plain(p.alt), lat, lng, content: cut(content, 600), hours: plain(p.hours), price: plain(p.price), url: p.url || '', wiki: (p.wikipedia || '').replace(/ /g, '_'), wikidata: p.wikidata || '', type, district, page: pg.title });
       });
     });
     if (items.length) try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), items })); } catch (e) { /* full */ }
