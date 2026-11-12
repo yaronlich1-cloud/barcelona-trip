@@ -234,7 +234,7 @@ svg { stroke-width: 1.8; }
 .big b { font-family: var(--body); font-size: 22px; }
 
 /* =================== v19: app-like motion and look =================== */
-:root { --ease: cubic-bezier(.2,.8,.2,1); --spring: cubic-bezier(.2,.9,.3,1.15); color-scheme: light dark; }
+:root { --ease: cubic-bezier(.2,.8,.2,1); --spring: cubic-bezier(.2,.9,.3,1.15); color-scheme: light; }
 html, body { overscroll-behavior-y: none; }
 body { background: var(--bg); color: var(--ink); }
 
@@ -384,29 +384,49 @@ body.on-map { padding-bottom: 0; }
   *, ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; transition: none !important; }
 }
 
-/* =================== dark mode =================== */
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #0F1524; --card: #182134; --line: #2A3550; --soft: #222D45; --muted: #9BA7C2; --ink: #E8EDF7; --glass: rgba(24,33,52,.86); }
-  .card, .list, .tool, .tc, .days, .ideas, .chipbtn, .lg, .add, .icon-btn, .ph-back { box-shadow: 0 1px 6px rgba(0,0,0,.35); }
-  .btn.navy { background: #2E4A9E; }
-  .btn.soft, .lg, .chipbtn, .add, .icon-btn, .mini { color: var(--ink); }
-  .lg, .chipbtn, .add, .icon-btn, .ideas, .timebar input { background: var(--card); }
-  input.field, select.field, textarea.field { background: #121a2b; color: var(--ink); border-color: var(--line); }
-  .alert { background: #3A2A12; color: #FFD9A0; } .alert.info { background: #1D2A48; color: #C9D6F5; }
-  .mini { background: rgba(255,255,255,.12); }
-  .hours-tag { color: #FFC07A; }
-  .seg { background: #1B2438; }
-  .sheet-bg { background: rgba(0,0,0,.55); }
-  .tile { background: color-mix(in srgb, var(--c, var(--day)) 22%, var(--card)); color: color-mix(in srgb, var(--c, var(--day)) 70%, #fff); }
-  .tn .tile { background: var(--card); color: color-mix(in srgb, var(--day) 70%, #fff); }
-  .tg.ok { color: #5FD3C2; } .li-done { color: #5FD3C2; } .tg.no { color: #FF8F7A; }
-  .tl > span { background: var(--soft); color: var(--ink); } .tl .warnc { background: #3A2A12; color: #FFD9A0; } .tl .okc { background: #133A35; color: #7FE3D3; }
-  .ab.on, .chipbtn.on { background: #133A35; color: #7FE3D3; }
-  .warn { background: #3A2A12; color: #FFD9A0; }
-  .badge { background: transparent; }
-  .eyebrow { filter: brightness(1.35); }
-  .dcard { background: #fff; color: #111; }
-  [style*="background:#fff" i], [style*="background:#EEF2FA"], [style*="background:#E6F6F3"], [style*="background:#F3F5FA"], [style*="background:#FFE7A3"] { color: #13213D; }
-  .leaflet-container { background: #1a2236; }
-  #toast { background: #E8EDF7; color: #13213D; } #toast button { color: #B07A00; }
-}
+
+/* =================== v20: light, soft, mosaic background =================== */
+:root { --bg: #F7F6F2; --soft: #EFEEEA; --line: #E6E3DC; --muted: #6B7287; --glass: rgba(255,255,255,.82); --sunsoft: #FFD772; }
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; background-image: var(--mosaic); background-size: 390px 200px; opacity: .07; pointer-events: none; }
+.card, .list, .tool, .tc, .days, .ideas { box-shadow: 0 1px 2px rgba(30,30,40,.04), 0 4px 14px rgba(30,30,40,.05); }
+
+/* softer accents: tinted instead of solid */
+.next { background: color-mix(in srgb, var(--day) 9%, #fff); color: var(--ink); border: 1px solid color-mix(in srgb, var(--day) 18%, #fff); }
+.next .lbl { color: var(--day); }
+.next .btn.ghost { background: #fff; color: var(--day); border: 1px solid color-mix(in srgb, var(--day) 25%, #fff); }
+.btn.sun, .ab.main, .mini.solid { background: var(--sunsoft); color: #3B2E00; }
+.fab { background: var(--sunsoft); color: #3B2E00; border-color: #fff; box-shadow: 0 8px 20px rgba(217,160,0,.25); }
+.btn.navy { background: color-mix(in srgb, var(--day) 12%, #fff); color: var(--day); }
+.pill { background: #fff; }
+.pill.on { background: color-mix(in srgb, var(--c) 13%, #fff); color: var(--c); border-color: color-mix(in srgb, var(--c) 45%, #fff); }
+.seg { background: var(--soft); }
+.seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(30,30,40,.1); }
+.dind { background: color-mix(in srgb, var(--c) 14%, #fff); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 35%, #fff); }
+.dayb.on { color: var(--c); }
+.ms-days button.on { background: color-mix(in srgb, var(--c) 14%, #fff); color: var(--c); border-color: color-mix(in srgb, var(--c) 45%, #fff); }
+.big { background: color-mix(in srgb, var(--c) 12%, #fff); color: var(--c); }
+.big span { color: var(--muted); opacity: 1; }
+.hero .chip.dark { background: rgba(255,255,255,.85); color: var(--ink); font-weight: 600; }
+#toast { background: #fff; color: var(--ink); box-shadow: 0 8px 26px rgba(30,30,40,.16); border: 1px solid var(--line); }
+#toast button { color: var(--blue); }
+.tile i { background: color-mix(in srgb, var(--c, var(--day)) 80%, #fff); }
+
+/* today: photo on a soft, semi-transparent mosaic */
+.dayhero { position: relative; height: 150px; overflow: hidden; }
+.dayhero.has-photo { height: 268px; }
+.dayhero .dh-mos { position: absolute; inset: 0; background-image: var(--mosaic); background-size: 390px 200px; opacity: .33; -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+.dayhero .dh-photo { position: absolute; top: calc(52px + env(safe-area-inset-top)); bottom: 6px; left: 16px; right: 16px; border-radius: 24px; overflow: hidden; box-shadow: 0 12px 30px rgba(30,30,40,.18); border: 3px solid #fff; }
+.dayhero .dh-photo img { width: 100%; height: 118%; object-fit: cover; will-change: transform; }
+.dayhero .chips { position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 16px; left: 16px; display: flex; gap: 6px; flex-wrap: wrap; flex-direction: row; z-index: 2; }
+.dayhero .chip { background: rgba(255,255,255,.9); color: var(--ink); border-radius: 99px; padding: 5px 12px; font-size: 12px; font-weight: 700; box-shadow: 0 1px 4px rgba(30,30,40,.08); }
+
+/* place page without a photo: soft mosaic, dark title */
+.dhero.noimg { height: 220px; background: var(--bg); }
+.dhero.noimg .dh-mosaic { background-image: var(--mosaic); background-size: 390px 200px; opacity: .35; -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent); mask-image: linear-gradient(to bottom, #000 40%, transparent); }
+.dhero.noimg .dh-shade { display: none; }
+.dhero.noimg .dh-text { color: var(--ink); }
+.dhero.noimg .dh-text h1 { color: var(--ink); text-shadow: none; }
+.dhero.noimg .dh-text .eyebrow { color: var(--day); }
+.dhero.noimg > .ph-back { background: #fff; }
+.dhero.noimg::after { content: ''; position: absolute; inset: 35% 0 0 0; background: linear-gradient(to bottom, transparent, var(--bg) 70%); pointer-events: none; }
+.dhero.noimg .dh-text { z-index: 1; }

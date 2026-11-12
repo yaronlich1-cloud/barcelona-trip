@@ -11,6 +11,18 @@ window.Enrich = (() => {
       finally { clearTimeout(t); }
     }
   };
+  // Ask several OpenStreetMap servers, staggered by 1.2 s; the first good answer wins and the rest are cancelled.
+  async function overpass(q, timeout) {
+    const ctrls = OVERPASS.map(() => new AbortController()); let done = false;
+    const one = (host, i) => new Promise((res, rej) => setTimeout(async () => {
+      if (done) { rej(new Error('done')); return; }
+      const t = setTimeout(() => ctrls[i].abort(), timeout || 9000);
+      try { const r = await fetch(`${host}?data=${encodeURIComponent(q)}`, { signal: ctrls[i].signal }); if (!r.ok) throw new Error('HTTP ' + r.status); res(await r.json()); }
+      catch (e) { rej(e); } finally { clearTimeout(t); }
+    }, i * 1200));
+    try { return await Promise.any(OVERPASS.map(one)); }
+    finally { done = true; ctrls.forEach((c) => c.abort()); }
+  }
   const OSM_TYPE = { N: 'node', W: 'way', R: 'relation', node: 'node', way: 'way', relation: 'relation' };
   const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9֐-׿ ]+/g, ' ').replace(/\s+/g, ' ').trim();
   const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\"]/g, '\\$&');
@@ -60,10 +72,7 @@ window.Enrich = (() => {
       q = `[out:json][timeout:15];nwr(around:90,${stop.lat},${stop.lng})["name"~"${reEsc(nm)}",i];out tags center 1;`;
     } else return null;
     let d = null;
-    for (const host of OVERPASS) {
-      try { d = await getJSON(`${host}?data=${encodeURIComponent(q)}`, 1, 9000); break; } catch (err) { /* try the next server */ }
-    }
-    if (!d) throw new Error('overpass unavailable');
+    try { d = await overpass(q, 9000); } catch (err) { throw new Error('overpass unavailable'); }
     const el = d.elements && d.elements[0];
     return el ? { tags: el.tags || {}, osm: { type: el.type, id: el.id } } : null;
   }
@@ -269,10 +278,9 @@ window.Enrich = (() => {
   async function nearby(cat, pts, radius) {
     if (!Array.isArray(pts)) pts = [pts];
     const a = `around:${radius || 700},${pts.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join(',')}`;
-    const q = `[out:json][timeout:20];(${NEAR_Q[cat](a)});out tags center 90;`;
+    const q = `[out:json][timeout:12];(${NEAR_Q[cat](a)});out tags center qt 90;`;
     let d = null;
-    for (const host of OVERPASS) { try { d = await getJSON(`${host}?data=${encodeURIComponent(q)}`, 1, 10000); break; } catch (err) { /* next server */ } }
-    if (!d) return photonNearby(cat, pts, radius);
+    try { d = await overpass(q, 9000); } catch (err) { return photonNearby(cat, pts, radius); }
     const seen = new Set(); const out = [];
     (d.elements || []).forEach((el) => {
       const t = el.tags || {}; const name = t.name || t['name:en']; if (!name) return;
@@ -293,9 +301,10 @@ window.Enrich = (() => {
   async function photonNearby(cat, pts, radius) {
     if (cat === 'eat') return []; // Photon has no diet data: food is shown only from verified sources
     const out = []; const seen = new Set(); let ok = 0;
-    for (const p of pts.slice(0, 5)) {
+    const answers = await Promise.allSettled(pts.slice(0, 5).map((p) => getJSON(`https://photon.komoot.io/reverse?lat=${p.lat}&lon=${p.lng}&radius=${Math.min(1.5, (radius || 700) / 1000)}&limit=25&${PH_TAGS[cat].map((t) => 'osm_tag=' + t).join('&')}`, 1, 8000)));
+    for (const a of answers) {
       try {
-        const d = await getJSON(`https://photon.komoot.io/reverse?lat=${p.lat}&lon=${p.lng}&radius=${Math.min(1.5, (radius || 700) / 1000)}&limit=25&${PH_TAGS[cat].map((t) => 'osm_tag=' + t).join('&')}`, 1, 10000);
+        if (a.status !== 'fulfilled') continue; const d = a.value;
         ok++;
         (d.features || []).forEach((f) => {
           const pr = f.properties || {}; if (!pr.name) return;
@@ -311,17 +320,17 @@ window.Enrich = (() => {
   // Wikipedia articles about places around a point: Hebrew first, then English
   async function wikiNearby(lat, lng, radius) {
     const out = [];
-    for (const lang of ['he', 'en']) {
+    const got = await Promise.allSettled(['he', 'en'].map((lang) => getJSON(`https://${lang}.wikipedia.org/w/api.php?action=query&generator=geosearch&ggscoord=${lat}|${lng}&ggsradius=${radius || 1000}&ggslimit=25&prop=coordinates|pageimages|description&piprop=thumbnail&pithumbsize=400&format=json&origin=*`, 1, 9000)));
+    for (const [n, lang] of ['he', 'en'].entries()) {
       try {
-        const d = await getJSON(`https://${lang}.wikipedia.org/w/api.php?action=query&generator=geosearch&ggscoord=${lat}|${lng}&ggsradius=${radius || 1000}&ggslimit=25&prop=coordinates|pageimages|description&piprop=thumbnail&pithumbsize=400&format=json&origin=*`, 1, 12000);
+        if (got[n].status !== 'fulfilled') continue; const d = got[n].value;
         Object.values((d.query || {}).pages || {}).forEach((p) => {
           if (!p.coordinates || !p.coordinates[0]) return;
           if (/^(Barcelona|Eixample|Ciutat Vella|Spain|Catalonia)$/i.test(p.title) || /^(ברצלונה|ספרד|קטלוניה)$/.test(p.title)) return;
           if (lang === 'en' && out.some((o) => Math.abs(o.lat - p.coordinates[0].lat) < 0.0003 && Math.abs(o.lng - p.coordinates[0].lon) < 0.0003)) return;
           out.push({ id: 'w' + lang + p.pageid, name: p.title, lat: p.coordinates[0].lat, lng: p.coordinates[0].lon, kind: 'gaudi', what: p.description || '', thumb: p.thumbnail ? p.thumbnail.source : '', wikiFixed: { lang, title: p.title }, lang });
         });
-      } catch (e) { /* try the other language */ }
-      if (out.length >= 12) break;
+      } catch (e) { /* the other language */ }
     }
     return out;
   }
@@ -330,6 +339,7 @@ window.Enrich = (() => {
   async function details(stop) {
     const out = { at: Date.now() };
     let osm = null;
+    const geoWiki = wikiByGeo(stop).catch(() => null); const pics = photosNear(stop, null).catch(() => []);
     try { osm = await osmTags(stop); } catch (e) { out.osmErr = true; }
     if (osm) {
       const t = osm.tags; out.osm = osm.osm;
@@ -342,11 +352,12 @@ window.Enrich = (() => {
       out.nameHe = t['name:he'] || '';
       out.wiki = await wikiFromTags(t);
     }
-    if (!out.wiki) out.wiki = await wikiByGeo(stop);
-    out.photos = await photosNear(stop, osm && osm.tags);
+    if (!out.wiki) out.wiki = await geoWiki;
+    out.photos = await pics;
+    if (osm && osm.tags && osm.tags.image && /^https:\/\/\S+\.(jpe?g|png|webp)$/i.test(osm.tags.image)) out.photos = [osm.tags.image, ...out.photos.filter((u) => u !== osm.tags.image)].slice(0, 12);
     out.partial = !!out.osmErr || (!osm && !out.wiki);
     return out;
   }
 
-  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear, openAt, nearby, wikiNearby, cityNow };
+  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear, openAt, nearby, wikiNearby, cityNow, photonNearby };
 })();

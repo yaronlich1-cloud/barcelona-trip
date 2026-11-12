@@ -87,7 +87,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '19 · 12.11';
+const VERSION = '20 · 12.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -328,7 +328,7 @@ function hero(opts = {}) {
   const small = opts.small;
   if (opts.bare) return `<svg class="tiles" viewBox="0 0 390 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g stroke="#F6F8FC" stroke-width="3" stroke-linejoin="round">${heroTiles(false)}</g></svg>`;
   const tiles = heroTiles(small);
-  if (opts.img) return `<div class="hero photo"><img class="hero-img" src="${esc(opts.img)}" alt=""><div class="shade"></div>${opts.chips || ''}<div class="hstrip">${mosaicStrip()}</div></div>`;
+  if (opts.day) return `<div class="dayhero ${opts.img ? 'has-photo' : ''}"><div class="dh-mos"></div>${opts.img ? `<div class="dh-photo"><img class="hero-img" src="${esc(opts.img)}" alt=""></div>` : ''}${opts.chips || ''}</div>`;
   const h = small ? 104 : 200;
   return heroWrap(small, h, tiles, opts);
 }
@@ -337,6 +337,10 @@ function heroTiles(small) {
     ? '<path class="tile-anim" d="M0 0h60l-8 46-52 6z" fill="#2453C9"/><path d="M60 0h56l4 42-68 4z" fill="#F2A900"/><path class="tile-anim d2" d="M116 0h62l-12 48-46-6z" fill="#fff"/><path d="M178 0h56l6 44-74 4z" fill="#1E9E8F"/><path class="tile-anim d3" d="M234 0h58l-8 40-50 4z" fill="#E8553D"/><path d="M292 0h54l8 46-70-6z" fill="#2453C9"/><path class="tile-anim" d="M346 0h44v52l-36-6z" fill="#C2417F"/><path d="M0 52l52-6 14 58H0z" fill="#E8553D"/><path class="tile-anim d2" d="M52 46l68-4-6 62-48 0z" fill="#13213D"/><path d="M120 42l46 6 20 56-72 0z" fill="#F2A900"/><path class="tile-anim d3" d="M166 48l74-4 2 60-56 0z" fill="#2453C9"/><path d="M240 44l44-4 14 64-56 0z" fill="#fff"/><path class="tile-anim" d="M284 40l70 6-4 58-52 0z" fill="#1E9E8F"/><path d="M354 46l36 6v52h-40z" fill="#F2A900"/>'
     : '<path class="tile-anim" d="M0 0h58l-10 44-48 8z" fill="#2453C9"/><path class="tile-anim d2" d="M58 0h52l6 38-68 6z" fill="#F2A900"/><path d="M110 0h60l-14 46-40-8z" fill="#fff"/><path class="tile-anim d3" d="M170 0h54l4 42-72 4z" fill="#1E9E8F"/><path d="M224 0h58l-8 36-46 6z" fill="#E8553D"/><path class="tile-anim" d="M282 0h56l10 44-74-8z" fill="#2453C9"/><path d="M338 0h52v50l-42-6z" fill="#F2A900"/><path d="M0 52l48-8 12 50-60 6z" fill="#E8553D"/><path class="tile-anim d3" d="M48 44l68-6-4 52-52 4z" fill="#13213D"/><path d="M116 38l40 8 22 44-66 0z" fill="#2453C9"/><path class="tile-anim" d="M156 46l72-4 0 50-50-2z" fill="#F2A900"/><path d="M228 42l46-6 14 52-60 4z" fill="#fff"/><path class="tile-anim d2" d="M274 36l74 8-6 46-54-2z" fill="#1E9E8F"/><path d="M348 44l42 6v44l-48-4z" fill="#C2417F"/><path d="M0 100l60-6 8 56-68 4z" fill="#1E9E8F"/><path d="M60 94l52-4 10 58-54 2z" fill="#F2A900"/><path class="tile-anim d2" d="M112 90h66l-6 60-50-2z" fill="#C2417F"/><path d="M178 90l50 2 8 56-64 2z" fill="#2453C9"/><path class="tile-anim d3" d="M228 92l60-4-4 60-48 0z" fill="#E8553D"/><path d="M288 88l54 2 4 58-62 0z" fill="#F2A900"/><path class="tile-anim" d="M342 90l48 4v56l-44-2z" fill="#2453C9"/><path d="M0 154l68-4 2 60H0z" fill="#2453C9"/><path d="M68 150l54-2-4 62-48 0z" fill="#fff"/><path d="M122 148l50 2 10 60-64 0z" fill="#1E9E8F"/><path d="M172 150l64-2-6 62-48 0z" fill="#F2A900"/><path d="M236 148h48l8 62-62 0z" fill="#13213D"/><path d="M284 148l62 0-2 62h-52z" fill="#E8553D"/><path d="M346 148l44 2v60h-46z" fill="#1E9E8F"/>';
 }
+(function mosaicBg() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 200"><rect width="390" height="200" fill="#fff"/><g stroke="#fff" stroke-width="5" stroke-linejoin="round">${heroTiles(false).replace(/ class="[^"]*"/g, '')}</g></svg>`;
+  document.documentElement.style.setProperty('--mosaic', `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
+})();
 function heroWrap(small, h, tiles, opts) {
   return `<div class="hero ${small ? 'small' : ''}">
     <svg class="tiles" viewBox="0 0 390 ${h}" preserveAspectRatio="xMidYMid slice"><g stroke="#F6F8FC" stroke-width="3" stroke-linejoin="round">${tiles}</g></svg>
@@ -357,7 +361,7 @@ const pageHead = (title, sub, back) => `<div class="topbar" aria-hidden="true">$
 // Detail header: full-width photo (or mosaic), title on top of it
 function detailHead(title, sub, back, img) {
   return `<div class="topbar" aria-hidden="true">${backBtn(back)}<b>${esc(title)}</b></div>
-  <div class="dhero">${img ? `<img class="dh-img" src="${esc(img)}" alt="" data-act="lightbox" data-i="0">` : `<div class="dh-mosaic">${hero({ small: false, bare: true })}</div>`}<div class="dh-shade"></div>
+  <div class="dhero ${img ? '' : 'noimg'}">${img ? `<img class="dh-img" src="${esc(img)}" alt="" data-act="lightbox" data-i="0">` : '<div class="dh-mosaic"></div>'}<div class="dh-shade"></div>
     ${backBtn(back)}<div class="dh-text"><span class="eyebrow">${esc(sub)}</span><h1>${esc(title)}</h1></div></div>`;
 }
 const actbar = (btns) => `<div class="actbar">${btns}</div>`;
@@ -414,18 +418,34 @@ function rankRecs(list, from) {
 const live = {};
 const areaPts = (c) => (c.pts ? c.pts : [c]);
 function liveKey(cat, c) { return cat + ':' + areaPts(c).map((p) => `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`).join('|'); }
+const LIVE_TTL = 12 * 3600e3;
 function loadLive(cat, c) {
   const k = liveKey(cat, c); const cur = live[k]; const pts = areaPts(c);
-  if (cur && (cur.loading || Date.now() - cur.at < 1800e3)) return cur;
-  try { const ss = JSON.parse(sessionStorage.getItem('bcn.live:' + k) || 'null'); if (ss && Date.now() - ss.at < 1800e3 && ss.items.length) { live[k] = ss; ss.items.forEach(reg); return ss; } } catch (e) { /* ignore */ }
+  if (cur && (cur.loading || Date.now() - cur.at < (cur.err ? 60e3 : LIVE_TTL))) return cur;
+  try { const ss = JSON.parse(localStorage.getItem('bcn.live:' + k) || 'null'); if (ss && Date.now() - ss.at < LIVE_TTL && ss.items.length) { live[k] = ss; ss.items.forEach(reg); return ss; } } catch (e) { /* ignore */ }
   live[k] = { loading: true, at: Date.now(), items: [] };
+  const refresh = () => { if (['#discover', '#today', '', '#shopping'].includes(location.hash)) render(); };
+  const radius = c.radius || (cat === 'shop' ? 1200 : pts.length > 1 ? 450 : 800);
+  // Quick first answer from Photon while OpenStreetMap is still thinking (not for food: Photon has no diet data)
+  if (!['eat', 'wiki'].includes(cat)) Enrich.photonNearby(cat, pts, radius).then((items) => { if (live[k] && live[k].loading && items.length) { items.forEach(reg); live[k] = { loading: true, partial: true, at: Date.now(), items }; refresh(); } }).catch(() => {});
   const job = cat === 'wiki'
-    ? (async () => { const all = []; const pick = pts.length <= 3 ? pts : [pts[0], pts[Math.floor(pts.length / 2)], pts[pts.length - 1]]; for (const p of pick) { try { (await Enrich.wikiNearby(p.lat, p.lng, pts.length > 1 ? 600 : 1000)).forEach((x) => { if (!all.some((y) => y.id === x.id)) all.push(x); }); } catch (e) { /* next */ } } if (!all.length) throw new Error('none'); return all; })()
-    : Enrich.nearby(cat, pts, c.radius || (cat === 'shop' ? 1200 : pts.length > 1 ? 450 : 800));
-  job.then((items) => { items.forEach(reg); saveRecs(); live[k] = { at: Date.now(), items }; try { sessionStorage.setItem('bcn.live:' + k, JSON.stringify(live[k])); } catch (e) { /* full */ } })
-    .catch(() => { live[k] = { at: Date.now() - 1740e3, items: [], err: true }; })
-    .finally(() => { if (['#discover', '#today', '', '#shopping'].includes(location.hash)) render(); });
+    ? (async () => { const pick = pts.length <= 3 ? pts : [pts[0], pts[Math.floor(pts.length / 2)], pts[pts.length - 1]]; const got = await Promise.allSettled(pick.map((p) => Enrich.wikiNearby(p.lat, p.lng, pts.length > 1 ? 600 : 1000))); const all = []; got.forEach((g) => { if (g.status === 'fulfilled') g.value.forEach((x) => { if (!all.some((y) => y.id === x.id)) all.push(x); }); }); if (!all.length) throw new Error('none'); return all; })()
+    : Enrich.nearby(cat, pts, radius);
+  job.then((items) => { items.forEach(reg); saveRecs(); live[k] = { at: Date.now(), items }; try { localStorage.setItem('bcn.live:' + k, JSON.stringify(live[k])); } catch (e) { pruneLive(); } })
+    .catch(() => { const prev = live[k]; live[k] = prev && prev.partial ? { at: Date.now(), items: prev.items } : { at: Date.now(), items: [], err: true }; })
+    .finally(() => { refresh(); prefetchNext(); });
   return live[k];
+}
+function pruneLive() { try { Object.keys(localStorage).filter((x) => x.startsWith('bcn.live:')).forEach((x) => { const v = JSON.parse(localStorage.getItem(x) || 'null'); if (!v || Date.now() - v.at > LIVE_TTL) localStorage.removeItem(x); }); } catch (e) { /* ignore */ } }
+setTimeout(pruneLive, 5000);
+// Load the other categories quietly, one at a time, so switching is instant
+const prefetchQ = [];
+function prefetchArea(A) { LIVE_CATS.forEach(([cat]) => { const k = liveKey(cat, A); if (!live[k] && !prefetchQ.some((q) => q.k === k)) prefetchQ.push({ k, cat, A }); }); prefetchNext(); }
+function prefetchNext() {
+  if (Object.values(live).some((v) => v && v.loading)) return;
+  const n = prefetchQ.shift(); if (!n) return;
+  if (live[n.k]) { prefetchNext(); return; }
+  setTimeout(() => loadLive(n.cat, n.A), 400);
 }
 function recRow(x, n, opts = {}) {
   const r = x.r; const st = inRoute(r); const sv = inSaved(r); const det = r.details || {};
@@ -494,7 +514,7 @@ V.today = () => {
     list += `<div class="tleg"><div class="tt"></div><div class="tn"></div><div class="tlegc"><button class="lg ${mode === 'walk' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="walk">${ic('walk')}${L.walk ? `${L.walk} דק׳` : 'ברגל'}</button><button class="lg ${mode === 'transit' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="transit">${ic('metro')}${L.transit ? `≈${L.transit} דק׳` : 'תחבורה'}</button><a class="lg-go" href="${gmDir(s, n, mode === 'walk' ? 'walking' : 'transit')}" target="_blank" rel="noopener">ניווט ›</a></div></div>`;
   });
   const dayUrl = 'https://www.google.com/maps/dir/' + day.stops.map((s) => q(s)).join('/');
-  return hero({ chips, img: dayPhoto(i) }) + `
+  return hero({ chips, img: dayPhoto(i), day: true }) + `
   <div class="head"><span class="eyebrow">יום ${i + 1} מתוך 5 · ${m.short} ${m.num}.12</span><h1>${esc(m.title)}</h1></div>
   <div class="days" role="tablist" aria-label="ימי הטיול"><span class="dind" style="--x:${lastDay ?? i};--c:${m.color}"></span>${META.map((d, k) => `<button class="dayb ${k === i ? 'on' : ''}" style="--c:${d.color}" role="tab" aria-selected="${k === i}" data-act="day" data-i="${k}"><b>${d.num}</b><span>${d.short}</span>${weather && weather[d.date] ? `<i>${weather[d.date].max}°</i>` : ''}</button>`).join('')}</div>
   ${installEvt && !standalone() ? `<div class="section"><button class="btn navy sm" data-act="install">${ic('plus')}התקן את האפליקציה בטלפון</button></div>` : ''}
@@ -630,6 +650,7 @@ function liveArea() {
 function liveView() {
   const A = liveArea(); const cat = LIVE_CATS.find((x) => x[0] === liveCat);
   const res = window.Enrich ? loadLive(liveCat, A) : { items: [], err: true };
+  if (window.Enrich && !res.loading) setTimeout(() => prefetchArea(A), 600);
   let items = res.items || [];
   let farFood = [];
   if (liveCat === 'eat') {
@@ -644,7 +665,7 @@ function liveView() {
   return `<div class="cats">${LIVE_CATS.map((t) => `<button class="pill ${t[0] === liveCat ? 'on' : ''}" style="--c:${t[2]}" data-act="liveCat" data-t="${t[0]}">${t[1]}</button>`).join('')}</div>
     <div class="selrow"><label class="lab">איזה יום<select class="field" id="lv-day">${META.map((m, k) => `<option value="${k}" ${liveDay !== 'here' && k === di ? 'selected' : ''}>${m.short} ${m.num}.12 · ${esc(cut(m.title, 22))}</option>`).join('')}<option value="here" ${liveDay === 'here' ? 'selected' : ''}>📍 המיקום שלי עכשיו</option></select></label>
     ${liveDay === 'here' ? '' : `<label class="lab">סביב<select class="field" id="lv-place"><option value="all">כל המסלול של היום</option>${stops.map((x) => `<option value="${x.id}" ${livePlace === x.id ? 'selected' : ''}>${esc(cut(x.name, 28))}</option>`).join('')}</select></label>`}</div>
-    <div class="row"><span class="muted grow">${res.loading ? 'מחפש…' : `${rows.length} מקומות · ${esc(A.name)}`}</span>${liveCat === 'wiki' ? '' : `<button class="chipbtn ${liveOpen ? 'on' : ''}" data-act="liveOpen">${liveOpen ? '✓ ' : ''}פתוח עכשיו</button>`}</div>
+    <div class="row"><span class="muted grow">${res.loading && !rows.length ? 'מחפש…' : `${rows.length} מקומות · ${esc(A.name)}${res.loading ? ' · מעדכן…' : ''}`}</span>${liveCat === 'wiki' ? '' : `<button class="chipbtn ${liveOpen ? 'on' : ''}" data-act="liveOpen">${liveOpen ? '✓ ' : ''}פתוח עכשיו</button>`}</div>
     ${farFood.length ? `<div class="card muted">אין לאורך המסלול הזה מסעדה טבעונית עם ללא גלוטן. הכי קרובות:</div>${recList(farFood.map((x, n) => recRow(x, n, { color: cat[2] })))}` : ''}
     ${farFood.length ? '' : res.loading && !rows.length ? skel(5) : res.err && !rows.length ? '<div class="card muted">החיפוש החי לא ענה כרגע (צריך אינטרנט, ולפעמים השרת עמוס). נסה שוב עוד רגע.</div><button class="btn soft sm" data-act="liveRetry">לחפש שוב</button>' : rows.length ? recList(rows.slice(0, 30).map((x, n) => recRow(x, n, { color: cat[2] }))) : `<div class="card muted">${liveOpen ? 'אין כרגע מקומות פתוחים כאן. בטל את "פתוח עכשיו".' : 'לא מצאתי מקומות כאן. נסה יום אחר או קטגוריה אחרת.'}</div>`}
     ${liveCat === 'eat' && !res.loading ? '<span class="muted">רק מקומות טבעוניים לגמרי עם אפשרויות ללא גלוטן: מהרשימה שבדקנו, ומ־OpenStreetMap כשהמקום מסומן שם בשני התנאים. כדאי לוודא במקום.</span>' : ''}`;
@@ -1328,7 +1349,7 @@ const A = {
   },
   liveCat: (e) => { liveCat = e.dataset.t; withTransition('tab', render); },
   liveOpen: () => { liveOpen = !liveOpen; render(); },
-  liveRetry: () => { const c = liveArea(); delete live[liveKey(liveCat, c)]; try { sessionStorage.removeItem('bcn.live:' + liveKey(liveCat, c)); } catch (e) { /* ignore */ } render(); },
+  liveRetry: () => { const c = liveArea(); delete live[liveKey(liveCat, c)]; try { localStorage.removeItem('bcn.live:' + liveKey(liveCat, c)); } catch (e) { /* ignore */ } render(); },
   ideas: (e) => {
     const i = +e.dataset.d; const D = ideasData(i);
     sheet(`<h3>רעיונות להיום</h3><span class="muted">${META[i].short} ${META[i].num}.12 · לפי השעה, מזג האוויר ומה ששמרת</span>
@@ -1542,6 +1563,7 @@ function addShared(text, title) {
 
 render();
 setTimeout(enrichAllSlowly, 2500);
+setTimeout(() => { if (window.Enrich && navigator.onLine) prefetchArea(liveArea()); }, 6000);
 loadWeather();
 loadRate();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
