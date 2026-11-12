@@ -71,16 +71,20 @@ window.TRIP = {
     fountain: { days: [4, 5, 6], text: 'המזרקה הקסומה (Font Màgica) פועלת בחורף רק בחמישי–שבת, בערך מ־20:00', src: 'https://www.barcelona.com/barcelona-theme-park/magic-fountain' }
   },
   discover: {
+    // Only fully vegan places with gluten-free options. Checked 12.11.2026.
     food: [
-      { name: 'Teresa Carles', note: 'צמחוני, הרבה מנות טבעוניות ואפשרויות ללא גלוטן', area: 'El Raval · Jovellanos 2', kind: 'food', lat: 41.38508, lng: 2.16801, src: 'https://timeout.com/barcelona/restaurants/teresa-carles' },
-      { name: 'Flax & Kale Passage', note: 'תפריט שבנוי גם לללא גלוטן, כולל פיצות GF ידידותיות לטבעונים', area: 'Sant Pere · Sant Pere Més Alt 31', kind: 'food', lat: 41.38842, lng: 2.17652, src: 'https://www.timeout.com/barcelona/restaurants/flax-kale-passage' },
-      { name: 'Roots & Rolls', note: 'סושי טבעוני', area: 'Eixample · Consell de Cent 401', kind: 'food', lat: 41.39536, lng: 2.17110, src: 'https://ajuntament.barcelona.cat/comerc/en/roots-rolls', verify: 'לשאול על אפשרויות ללא גלוטן' },
-      { name: 'Honest Greens (Born)', note: 'בריא ומהיר, מסומן מה טבעוני ומה ללא גלוטן', area: 'El Born · Pla de Palau 11', kind: 'food', lat: 41.38343, lng: 2.18321, src: 'https://www.honestgreens.com/en/restaurants/born-en' },
-      { name: 'Honest Greens (Gràcia)', note: 'אותה רשת, ליד Passeig de Gràcia', area: 'Gràcia · Gran de Gràcia 30', kind: 'food', lat: 41.39870, lng: 2.15699, src: 'https://www.honestgreens.com/en/restaurants/gdg-en' },
-      { name: 'Hanai Vegana', note: 'מאפייה טבעונית וללא גלוטן לגמרי, לבראנץ׳ ומתוקים', area: 'El Born · Carders 28', kind: 'food', lat: 41.38679, lng: 2.18030, src: 'https://www.happycow.net/reviews/hanai-vegana-barcelona-122320', verify: 'פתוח בדרך כלל רביעי–ראשון' },
-      { name: 'Mad Mad Vegan', note: 'טבעוני, המבורגרים וטאקו, יש אפשרויות ללא גלוטן', area: 'Eixample · Aribau 65', kind: 'food', lat: 41.38871, lng: 2.15870, src: 'https://www.timeout.es/barcelona/es/restaurantes/mad-mad-vegan-barcelona' },
-      { name: 'Asante Café', note: 'בראנץ׳ טבעוני לגמרי. לחם ללא גלוטן לפי מלאי, הקינוחים לא GF', area: 'Sants · Elkano 63', kind: 'food', lat: 41.37401, lng: 2.16016, src: 'https://www.happycow.net/reviews/asante-barcelona-407671', verify: 'פתוח רק בחלק מימות השבוע, עד אחר הצהריים' }
+      { name: 'Pötstot (Raval)', note: 'אוכל קטלאני, 100% טבעוני ו־100% ללא גלוטן, בלי עקבות גלוטן במטבח', area: 'El Raval · Pintor Fortuny 32', kind: 'food', vegan: 'only', gf: 'only', lat: 41.38242, lng: 2.16870, src: 'https://barcelonaurbana.com/en/blog/best-vegan-restaurants-barcelona' },
+      { name: 'Pötstot (Sagrada Família)', note: 'אותה מסעדה, מול הבזיליקה: פאייה, קנלוני וקרוקטס, טבעוני וללא גלוטן לגמרי', area: 'Sagrada Família · Pl. de la Sagrada Família 15', kind: 'food', vegan: 'only', gf: 'only', lat: 41.40340, lng: 2.17282, src: 'https://barcelonaurbana.com/en/blog/best-vegan-restaurants-barcelona' },
+      { name: 'Pötstot (Eixample)', note: 'הסניף באישאמפלה, טבעוני וללא גלוטן לגמרי', area: 'Eixample · València 204', kind: 'food', vegan: 'only', gf: 'only', lat: 41.38867, lng: 2.15831, src: 'https://barcelonaurbana.com/en/blog/best-vegan-restaurants-barcelona' },
+      { name: 'Hanai Vegana', note: 'מאפייה טבעונית וללא גלוטן לגמרי, לבראנץ׳ ומתוקים', area: 'El Born · Carders 28', kind: 'food', vegan: 'only', gf: 'only', lat: 41.38679, lng: 2.18030, src: 'https://www.happycow.net/reviews/hanai-vegana-barcelona-122320', verify: 'פתוח בדרך כלל רביעי–ראשון' },
+      { name: 'Veganashi', note: 'מטבח יפני טבעוני וללא גלוטן, סושי', area: 'Poble-sec · Lleida 33', kind: 'food', vegan: 'only', gf: 'only', lat: 41.37246, lng: 2.15556, src: 'https://www.atly.com/top/gluten-free/vegan-spain-barcelona' },
+      { name: 'Roots & Rolls', note: 'סושי טבעוני, הרבה אפשרויות ללא גלוטן. לבקש tamari במקום סויה', area: 'Eixample · Consell de Cent 401', kind: 'food', vegan: 'only', gf: 'yes', lat: 41.39536, lng: 2.17110, src: 'https://plantspack.com/place/roots-and-rolls', verify: 'לשאול על רוטב סויה ללא גלוטן' },
+      { name: 'Mad Mad Vegan', note: 'טבעוני, המבורגרים וטאקו, יש אפשרויות ללא גלוטן', area: 'Eixample · Aribau 65', kind: 'food', vegan: 'only', gf: 'yes', lat: 41.38871, lng: 2.15870, src: 'https://proveg.org/news/seven-best-vegan-friendly-restaurants-to-visit-in-barcelona-in-2025/' },
+      { name: 'Wild Food BCN', note: 'טבעוני לגמרי, הרבה אפשרויות ללא גלוטן', area: 'Eixample · Diagonal 420', kind: 'food', vegan: 'only', gf: 'yes', lat: 41.39794, lng: 2.16368, src: 'https://www.atly.com/best/gluten-free/vegan-spain-barcelona', verify: 'לצליאקים: לשאול על מגע עם גלוטן' },
+      { name: 'Asante Café', note: 'בראנץ׳ טבעוני לגמרי. לחם ללא גלוטן לפי מלאי, הקינוחים לא ללא גלוטן', area: 'Sants · Elkano 63', kind: 'food', vegan: 'only', gf: 'limited', lat: 41.37401, lng: 2.16016, src: 'https://www.happycow.net/reviews/asante-barcelona-407671', verify: 'פתוח רק בחלק מימות השבוע, עד אחר הצהריים' }
     ],
+    // Places in the original plan that are not fully vegan: the app suggests a vegan + gluten-free swap
+    notVegan: ['Teresa Carles', 'Honest Greens', 'Flax & Kale'],
     bars: [
       { name: 'Monk Barcelona', note: 'קוקטיילים בבר נסתר מאחורי חנות מכולת', area: 'El Born · Abaixadors 10', kind: 'bar', lat: 41.38330, lng: 2.18147, src: 'https://www.diffordsguide.com/bars/z268Az/monk' },
       { name: 'Paradiso', note: 'נכנסים דרך מקרר בבר פסטרמה. מקום 4 ברשימת 50 הברים הטובים בעולם 2025', area: 'El Born · Rera Palau 4', kind: 'bar', lat: 41.38367, lng: 2.18370, src: 'https://www.theworlds50best.com/bars/best-in-the-world/the-list/paradiso.html' },

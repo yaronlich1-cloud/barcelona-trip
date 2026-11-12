@@ -259,7 +259,8 @@ window.Enrich = (() => {
 
   /* ---------- live recommendations around a point (OpenStreetMap) ---------- */
   const NEAR_Q = {
-    eat: (a) => `nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:vegan"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:gluten_free"~"^(yes|only)$"];nwr(${a})["amenity"~"^(restaurant|cafe)$"]["cuisine"~"vegan|vegetarian"];nwr(${a})["amenity"~"^(restaurant|cafe)$"]["diet:vegetarian"~"^(only)$"];`,
+    // Food: fully vegan AND with gluten-free options, nothing else
+    eat: (a) => `nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["diet:vegan"="only"]["diet:gluten_free"~"^(yes|only|limited)$"];nwr(${a})["amenity"~"^(restaurant|cafe|fast_food|ice_cream)$"]["cuisine"~"vegan"]["diet:gluten_free"~"^(yes|only|limited)$"];`,
     drink: (a) => `nwr(${a})["amenity"~"^(bar|pub|biergarten)$"]["name"];nwr(${a})["amenity"="cafe"]["cuisine"~"coffee"]["name"];`,
     shop: (a) => `nwr(${a})["shop"~"^(clothes|shoes|department_store|fashion_accessories)$"]["brand"~"Zara|Mango|Uniqlo|Pull&Bear|Bershka|Massimo Dutti|Stradivarius|Oysho|H&M|Primark|Corte Ingl|Desigual|COS|Lefties",i];nwr(${a})["shop"~"^(clothes|department_store)$"]["name"~"Zara|Mango|Uniqlo|Pull&Bear|Massimo Dutti|Primark|Corte Ingl",i];`,
     see: (a) => `nwr(${a})["tourism"~"^(attraction|museum|viewpoint|gallery)$"]["name"];nwr(${a})["historic"~"^(monument|castle|church|palace|archaeological_site)$"]["name"];nwr(${a})["leisure"~"^(park|garden)$"]["name"]["wikidata"];nwr(${a})["amenity"="marketplace"]["name"];`
@@ -290,6 +291,7 @@ window.Enrich = (() => {
   // Fallback when no OpenStreetMap server answers: Photon finds places by type around each stop (no diet or hours data).
   const PH_TAGS = { eat: ['amenity:restaurant', 'amenity:cafe', 'amenity:fast_food'], drink: ['amenity:bar', 'amenity:pub'], see: ['tourism:museum', 'tourism:attraction', 'tourism:viewpoint', 'historic:monument', 'tourism:gallery'], shop: ['shop:clothes', 'shop:department_store', 'shop:shoes'] };
   async function photonNearby(cat, pts, radius) {
+    if (cat === 'eat') return []; // Photon has no diet data: food is shown only from verified sources
     const out = []; const seen = new Set(); let ok = 0;
     for (const p of pts.slice(0, 5)) {
       try {
