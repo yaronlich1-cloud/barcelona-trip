@@ -501,3 +501,52 @@ body::before { opacity: .09; }
 .jend { padding: 14px 0 0 0; padding-inline-start: 60px; }
 html { background: var(--bg); }
 body { background: transparent; }
+
+/* v22: gems, one card at a time */
+.gem { position: relative; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 2px 4px rgba(30,30,40,.05), 0 12px 32px rgba(30,30,40,.10); touch-action: pan-y; user-select: none; transition: transform .25s var(--ease), opacity .25s; animation: gemIn .32s var(--spring) both; --yes: 0; --no: 0; }
+.gem.drag { transition: none; }
+.gem.fly-yes { transform: translateX(130%) rotate(14deg); opacity: 0; }
+.gem.fly-no { transform: translateX(-130%) rotate(-14deg); opacity: 0; }
+@keyframes gemIn { from { transform: translateY(14px) scale(.97); opacity: 0; } }
+.gem-ph { position: relative; height: 210px; background: var(--soft); }
+.gem-ph img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.gem-ph.noimg { background-image: var(--mosaic); background-size: 390px 200px; display: grid; place-items: center; }
+.gem-ph.noimg::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,.55); }
+.gem-ic { position: relative; z-index: 1; width: 64px; height: 64px; border-radius: 20px; background: #fff; display: grid; place-items: center; color: var(--blue); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.gem-ic svg { width: 30px; height: 30px; }
+.gem-score { position: absolute; top: 12px; right: 12px; z-index: 2; background: rgba(255,255,255,.94); border-radius: 14px; padding: 6px 10px; display: flex; flex-direction: column; align-items: center; line-height: 1; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+.gem-score b { font-size: 22px; color: var(--navy); }
+.gem-score small { font-size: 10px; color: var(--muted); margin-top: 3px; font-weight: 600; }
+.gem-yes, .gem-no { position: absolute; top: 16px; z-index: 3; padding: 6px 12px; border-radius: 12px; font-weight: 800; font-size: 16px; border: 3px solid; background: rgba(255,255,255,.9); pointer-events: none; }
+.gem-yes { left: 14px; color: var(--teal); opacity: var(--yes); transform: rotate(-8deg); }
+.gem-no { left: 14px; top: 60px; color: var(--red); opacity: var(--no); transform: rotate(8deg); }
+.gem-b { padding: 14px 16px 6px; display: flex; flex-direction: column; gap: 8px; }
+.gem-b h3 { margin: 0; font-size: 20px; line-height: 1.2; }
+.gem-he { color: var(--muted); font-size: 14px; margin-top: -4px; }
+.gem-near { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+.gem-near svg { width: 14px; height: 14px; flex: none; }
+.gem-bg { margin: 0; font-size: 15px; line-height: 1.55; }
+.gem-why, .gem-skip { font-size: 14px; line-height: 1.5; padding: 8px 10px; border-radius: 12px; background: #EAF6F3; }
+.gem-skip { background: #FBF0EC; }
+.gem-why b, .gem-skip b { display: block; font-size: 12px; color: var(--muted); }
+.gem-facts { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.gem-facts span { display: flex; align-items: center; gap: 6px; }
+.gem-facts svg { width: 15px; height: 15px; color: var(--muted); flex: none; }
+.gem-acts { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 8px; padding: 10px 12px 14px; }
+.gem-acts button { border: 0; border-radius: 16px; padding: 10px 4px; font: inherit; font-weight: 800; font-size: 18px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; transition: transform .16s var(--ease); }
+.gem-acts button span { font-size: 12px; font-weight: 700; }
+.gem-acts button:active { transform: scale(.94); }
+.gem-acts .gx { background: var(--soft); color: var(--muted); }
+.gem-acts .gs { background: #FFF4D6; color: #9A6B00; }
+.gem-acts .gd { background: var(--blue); color: #fff; }
+.gem-next { text-align: center; font-size: 12px; }
+.gem-end { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.tg.gemt { color: var(--blue); }
+.gem-sc { color: var(--navy); }
+.gem-sc.big { font-size: 26px; font-weight: 800; background: var(--soft); border-radius: 14px; padding: 6px 10px; }
+.gem-info { display: flex; flex-direction: column; gap: 8px; }
+button.lnk { border: 0; background: none; font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
+.gem-ph { height: 180px; }
+.gem-acts { position: sticky; bottom: calc(98px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 16px rgba(30,30,40,.06); z-index: 4; background: rgba(255,255,255,.94); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--line); }
+.gem-info > .row { align-items: center; }
+.gem { overflow: clip; } .gem-ph { overflow: hidden; border-radius: 24px 24px 0 0; }

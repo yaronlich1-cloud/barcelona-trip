@@ -359,5 +359,95 @@ window.Enrich = (() => {
     return out;
   }
 
-  return { details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear, openAt, nearby, wikiNearby, cityNow, photonNearby };
+
+  /* ---------- Wikivoyage: the open travel guide's "see" and "do" listings for every Barcelona district ---------- */
+  const WV = 'https://en.wikivoyage.org/w/api.php';
+  function templates(text) {
+    const out = []; const re = /\{\{\s*(see|do|listing)\s*\|/gi; let m;
+    while ((m = re.exec(text))) {
+      let i = m.index + 2, depth = 1;
+      while (i < text.length && depth) { if (text.startsWith('{{', i)) { depth++; i += 2; } else if (text.startsWith('}}', i)) { depth--; i += 2; } else i++; }
+      out.push({ type: m[1].toLowerCase(), body: text.slice(m.index + m[0].length, i - 2) });
+      re.lastIndex = i;
+    }
+    return out;
+  }
+  function params(body) {
+    const out = {}; let depth = 0, cur = '';
+    const parts = [];
+    for (let i = 0; i < body.length; i++) {
+      const two = body.substr(i, 2);
+      if (two === '{{' || two === '[[') { depth++; cur += two; i++; continue; }
+      if ((two === '}}' || two === ']]') && depth) { depth--; cur += two; i++; continue; }
+      if (body[i] === '|' && !depth) { parts.push(cur); cur = ''; continue; }
+      cur += body[i];
+    }
+    parts.push(cur);
+    parts.forEach((p) => { const k = p.indexOf('='); if (k > 0) out[p.slice(0, k).trim().toLowerCase()] = p.slice(k + 1).trim(); });
+    return out;
+  }
+  const plain = (t) => String(t || '').replace(/\{\{[^{}]*\}\}/g, '').replace(/\[\[(?:[^|\]]*\|)?([^\]]+)\]\]/g, '$1').replace(/\[https?:\S+\s([^\]]+)\]/g, '$1').replace(/'{2,}/g, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  async function voyage() {
+    const key = 'bcn.wv';
+    try { const c = JSON.parse(localStorage.getItem(key) || 'null'); if (c && Date.now() - c.at < 7 * 864e5 && c.items.length) return c.items; } catch (e) { /* none */ }
+    const ps = await getJSON(`${WV}?action=query&list=prefixsearch&pssearch=Barcelona/&psnamespace=0&pslimit=40&format=json&origin=*`, 2, 12000);
+    const titles = ['Barcelona', ...((ps.query || {}).prefixsearch || []).map((x) => x.title)].slice(0, 45);
+    const d = await getJSON(`${WV}?action=query&prop=revisions&rvprop=content&rvslots=main&titles=${encodeURIComponent(titles.join('|'))}&format=json&origin=*`, 2, 20000);
+    const items = []; const seen = new Set();
+    Object.values((d.query || {}).pages || {}).forEach((pg) => {
+      const rev = (pg.revisions || [])[0]; const text = rev && ((rev.slots && rev.slots.main && (rev.slots.main['*'] || rev.slots.main.content)) || rev['*']); if (!text) return;
+      const district = pg.title.replace(/^Barcelona\/?/, '') || 'Barcelona';
+      templates(text).forEach((t) => {
+        const p = params(t.body); const type = t.type === 'listing' ? (p.type || '').toLowerCase() : t.type;
+        if (!['see', 'do'].includes(type)) return;
+        const lat = parseFloat(p.lat), lng = parseFloat(p.long || p.lon);
+        const name = plain(p.name); const content = plain(p.content || p.description);
+        if (!name || !content || !(lat > 41.2 && lat < 41.6 && lng > 1.9 && lng < 2.4) || seen.has(norm(name))) return;
+        seen.add(norm(name));
+        items.push({ name, alt: plain(p.alt), lat, lng, content: cut(content, 600), hours: plain(p.hours), price: plain(p.price), url: p.url || '', wiki: (p.wikipedia || '').replace(/ /g, '_'), wikidata: p.wikidata || '', type, district });
+      });
+    });
+    if (items.length) try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), items })); } catch (e) { /* full */ }
+    return items;
+  }
+  /* ---------- popularity: yearly English Wikipedia readers ---------- */
+  async function pageviews(titles) {
+    const key = 'bcn.pv'; let c = {}; try { c = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { /* none */ }
+    const now = new Date(); const ym = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}01`;
+    const end = ym(now); const startD = new Date(now); startD.setUTCFullYear(now.getUTCFullYear() - 1); const start = ym(startD);
+    const todo = titles.filter((t) => t && !(c[t] && Date.now() - c[t].at < 30 * 864e5));
+    for (let i = 0; i < todo.length; i += 4) {
+      await Promise.allSettled(todo.slice(i, i + 4).map(async (t) => {
+        try {
+          const d = await getJSON(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/${encodeURIComponent(t)}/monthly/${start}/${end}`, 1, 9000);
+          c[t] = { n: (d.items || []).reduce((a, x) => a + x.views, 0), at: Date.now() };
+        } catch (e) { c[t] = { n: null, at: Date.now() - 29 * 864e5 }; }
+      }));
+    }
+    try { localStorage.setItem(key, JSON.stringify(c)); } catch (e) { /* full */ }
+    const out = {}; titles.forEach((t) => { if (c[t] && c[t].n != null) out[t] = c[t].n; }); return out;
+  }
+  // Lead photos for many Wikipedia articles in one request
+  async function leadImages(titles) {
+    const key = 'bcn.img'; let c = {}; try { c = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { /* none */ }
+    const todo = [...new Set(titles.filter((t) => t && !(t in c)))];
+    for (let i = 0; i < todo.length; i += 40) {
+      const part = todo.slice(i, i + 40);
+      try {
+        const d = await getJSON(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&piprop=thumbnail&pithumbsize=900&redirects=1&titles=${encodeURIComponent(part.map((t) => t.replace(/_/g, ' ')).join('|'))}&format=json&origin=*`, 2, 12000);
+        const q = d.query || {}; const back = {};
+        [...(q.normalized || []), ...(q.redirects || [])].forEach((x) => { back[x.to] = back[x.from] || x.from; });
+        Object.values(q.pages || {}).forEach((pg) => {
+          let t = pg.title; const chain = [t]; while (back[t]) { t = back[t]; chain.push(t); }
+          const src = (pg.thumbnail && pg.thumbnail.source) || '';
+          part.forEach((orig) => { if (chain.includes(orig.replace(/_/g, ' ')) || chain.includes(orig)) c[orig] = src; });
+        });
+        part.forEach((t) => { if (!(t in c)) c[t] = ''; });
+      } catch (e) { /* later */ }
+    }
+    try { localStorage.setItem(key, JSON.stringify(c)); } catch (e) { /* full */ }
+    return c;
+  }
+
+  return { voyage, pageviews, leadImages, details, wikiArticle, parseHours, kindFrom, toHeOrEn, translate, photosNear, openAt, nearby, wikiNearby, cityNow, photonNearby };
 })();
