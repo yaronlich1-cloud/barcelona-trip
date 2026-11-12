@@ -88,7 +88,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '23 · 12.11';
+const VERSION = '24 · 12.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -393,7 +393,7 @@ function recStop(r) {
   return ns;
 }
 function addRecToDay(r, di) {
-  const ns = recStop(r); S.days[di].stops.push(ns); save(); render();
+  const ns = recStop(r); S.days[di].stops.push(ns); if (r.gem) S.gems[r.gem] = 'yes'; save(); render();
   toast(`נוסף ליום ${META[di].short} · מופיע במסלול, במפה ובניווט`);
   if (!ns.details || !ns.details.photos) enrichStop(ns, true);
 }
@@ -425,7 +425,7 @@ function loadLive(cat, c) {
   if (cur && (cur.loading || Date.now() - cur.at < (cur.err ? 60e3 : LIVE_TTL))) return cur;
   try { const ss = JSON.parse(localStorage.getItem('bcn.live:' + k) || 'null'); if (ss && Date.now() - ss.at < LIVE_TTL && ss.items.length) { live[k] = ss; ss.items.forEach(reg); return ss; } } catch (e) { /* ignore */ }
   live[k] = { loading: true, at: Date.now(), items: [] };
-  const refresh = () => { if (['#discover', '#today', '', '#shopping'].includes(location.hash)) render(); };
+  const refresh = () => { if (location.hash === '#map') { drawMarkers(false); renderMapSheet(); } else if (['#discover', '#today', '', '#shopping'].includes(location.hash)) render(); };
   const radius = c.radius || (cat === 'shop' ? 1200 : pts.length > 1 ? 450 : 800);
   // Quick first answer from Photon while OpenStreetMap is still thinking (not for food: Photon has no diet data)
   if (!['eat', 'wiki'].includes(cat)) Enrich.photonNearby(cat, pts, radius).then((items) => { if (live[k] && live[k].loading && items.length) { items.forEach(reg); live[k] = { loading: true, partial: true, at: Date.now(), items }; refresh(); } }).catch(() => {});
@@ -496,9 +496,7 @@ V.today = () => {
   const needB = day.stops.filter(needsBooking);
   if (needB.length) alerts.push(`<a class="alert" href="#tickets">${ic('ticket')}<span class="grow">להזמין מראש: ${needB.map((x) => esc(x.name)).join(', ')}</span><span class="mini">לכרטיסים</span></a>`);
   const idea = ideasData(i);
-  const ideasBar = idea.recs.length || idea.evs.length ? `<button class="ideas" data-act="ideas" data-d="${i}"><span class="tile" style="--c:#D99400">${ic('star')}</span><span class="grow"><b>רעיונות להיום</b><span class="muted">${[idea.evs.length ? `${idea.evs.length} אירועים ליד המסלול` : '', idea.recs.length ? `${idea.recs.length} המלצות לפי השעה` : ''].filter(Boolean).join(' · ')}</span></span><span class="chev">›</span></button>` : '';
-  const nearG = window.GEMS.filter((g) => !S.gems[g.id] && !inRoute({ ...g }) && ((n) => n && n.di === i && n.d < 1.5)(gemNear(g))).sort((a, b) => b.score - a.score);
-  const gemBar = nearG.length ? `<button class="ideas" data-act="gemDays" data-d="${i}"><span class="tile" style="--c:#2453C9">${ic('star')}</span><span class="grow"><b>💎 ${nearG.length} פנינים ליד המסלול</b><span class="muted">${esc(nearG.slice(0, 2).map((g) => cut(g.he || g.name, 22)).join(' · '))}</span></span><span class="chev">›</span></button>` : '';
+  const ideasBar = idea.recs.length || idea.evs.length || idea.gems.length ? `<button class="ideas" data-act="ideas" data-d="${i}"><span class="tile" style="--c:#2453C9">${ic('star')}</span><span class="grow"><b>רעיונות להיום</b><span class="muted">${[idea.gems.length ? `💎 ${idea.gems.length} פנינים` : '', idea.evs.length ? `${idea.evs.length} אירועים` : '', idea.recs.length ? `${idea.recs.length} המלצות לפי השעה` : ''].filter(Boolean).join(' · ')}</span></span><span class="chev">›</span></button>` : '';
   const nx = day.stops[0]; const plan = schedule(i);
   let list = '';
   day.stops.forEach((s, si) => {
@@ -506,15 +504,14 @@ V.today = () => {
     const tl = `<div class="tl"><span dir="ltr">${fmtT(P.arrive)}${P.leave > P.arrive ? '–' + fmtT(P.leave) : ''}</span>${s.time ? `<span class="tk">${ic('ticket')}${esc(s.time)}</span>` : ''}${needsBooking(s) ? '<span class="tk warnc">להזמין</span>' : ''}${s.visited ? '<span class="tk okc">✓</span>' : ''}</div>`;
     const note = P.late ? `תגיע ${P.late} דק׳ אחרי שעת הכניסה` : P.closed ? P.closed : cn ? cn : '';
     list += `<div class="tstop ${cn || P.closed || P.late ? 'closed' : ''}" data-pid="${s.id}">
-      <div class="tt" dir="ltr">${fmtT(P.arrive)}${P.leave > P.arrive ? `<small>${fmtT(P.leave)}</small>` : ''}</div>
       <div class="tn"><span class="tnum">${si + 1}</span></div>
-      <div class="tc"><a href="#place/${i}/${s.id}" class="tc-a"><div class="t"><span class="tkind">${ic(s.kind)}</span>${esc(s.name)}</div>${s.note ? `<div class="muted">${esc(s.note)}</div>` : ''}
+      <div class="tc"><span class="tkind tk-lg">${ic(s.kind)}</span><a href="#place/${i}/${s.id}" class="tc-a"><div class="ttime" dir="ltr">${fmtT(P.arrive)}${P.leave > P.arrive ? `–${fmtT(P.leave)}` : ''}</div><div class="t">${esc(s.name)}</div>${s.note ? `<div class="muted">${esc(s.note)}</div>` : ''}
         <div class="tl">${s.time ? `<span class="tk">${ic('ticket')}${esc(s.time)}</span>` : ''}${needsBooking(s) ? '<span class="tk warnc">להזמין</span>' : ''}${s.visited ? '<span class="tk okc">✓ ביקרתי</span>' : ''}</div>
         ${note ? `<div class="hours-tag">${note}</div>` : ''}${P.wait >= 20 ? `<div class="muted">${P.wait} דק׳ פנויות לפני · <span class="lnk" data-act="liveFrom" data-d="${i}" data-id="${(day.stops[si - 1] || s).id}">מה יש בסביבה</span></div>` : ''}</a>
       ${s.hotelRef && !(S.hotel && S.hotel.name) ? `<button class="mini solid" data-act="hotelEdit">הוסף מלון</button>` : `<a class="icon-btn" href="${gmDir(null, s, 'walking')}" target="_blank" rel="noopener" aria-label="נווט ב־Google Maps">${ic('pin')}</a>`}</div></div>`;
     const n = day.stops[si + 1]; if (!n) return;
     const L = legInfo(s, n); const key = s.id + '>' + n.id; const mode = S.legs[key] || L.rec;
-    list += `<div class="tleg"><div class="tt"></div><div class="tn"></div><div class="tlegc"><button class="lg ${mode === 'walk' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="walk">${ic('walk')}${L.walk ? `${L.walk} דק׳` : 'ברגל'}</button><button class="lg ${mode === 'transit' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="transit">${ic('metro')}${L.transit ? `≈${L.transit} דק׳` : 'תחבורה'}</button><a class="lg-go" href="${gmDir(s, n, mode === 'walk' ? 'walking' : 'transit')}" target="_blank" rel="noopener">ניווט ›</a></div></div>`;
+    list += `<div class="tleg"><div class="tn"></div><div class="tlegc"><button class="lg ${mode === 'walk' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="walk">${ic('walk')}${L.walk ? `${L.walk} דק׳` : 'ברגל'}</button><button class="lg ${mode === 'transit' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="transit">${ic('metro')}${L.transit ? `≈${L.transit} דק׳` : 'תחבורה'}</button><a class="lg-go" href="${gmDir(s, n, mode === 'walk' ? 'walking' : 'transit')}" target="_blank" rel="noopener">ניווט ›</a></div></div>`;
   });
   const dayUrl = 'https://www.google.com/maps/dir/' + day.stops.map((s) => q(s)).join('/');
   return hero({ chips, img: dayPhoto(i), day: true }) + `
@@ -526,7 +523,6 @@ V.today = () => {
   <div class="section">
     ${alerts.join('')}
     ${ideasBar}
-    ${gemBar}
     <div class="row" style="margin-top:6px"><h2 class="grow">המסלול</h2><button class="chipbtn" data-act="sortDay">${ic('sort')}סדר</button><a class="chipbtn" href="#places">${ic('pen')}עריכה</a><a class="chipbtn" href="${dayUrl}" target="_blank" rel="noopener">${ic('pin')}כל היום</a></div>
     <div class="timebar"><label for="day-start">יוצאים ב־</label><input type="time" id="day-start" value="${fmtT(toMin(S.dayStart[i]) ?? 570)}" data-d="${i}">${plan.length ? `<span class="grow">סיום משוער <b>${fmtT(plan[plan.length - 1].leave)}</b></span>` : ''}</div>
     ${list ? `<div class="tline">${list}</div>` : '<div class="card muted">אין עדיין מקומות ביום הזה. לחץ על "+ מקום".</div>'}
@@ -537,7 +533,9 @@ V.today = () => {
 
 // Ideas for the day: by the Barcelona clock, the weather, the first stop and what you saved
 function ideasData(i) {
-  const res = { recs: [], evs: [] }; if (!window.Enrich) return res;
+  const res = { recs: [], evs: [], gems: [] };
+  res.gems = window.GEMS.filter((g) => !S.gems[g.id] && !inRoute({ ...g }) && ((n) => n && n.di === i && n.d < 1.5)(gemNear(g))).sort((a, b) => b.score - a.score);
+  if (!window.Enrich) return res;
   const day = S.days[i]; const m = META[i];
   res.evs = evOn(m.date).map((e) => ({ e, d: Math.min(...day.stops.filter(hasGeo).map((st) => km(st, e)).concat([99])) })).filter((o) => o.d < 2 && !inRoute(evRec(o.e))).sort((a, b) => a.d - b.d);
   const anchor = day.stops.find((x) => hasGeo(x) && !x.hotelRef) || day.stops.find(hasGeo); if (!anchor) return res;
@@ -579,20 +577,52 @@ let mapSheet = 'peek';
 V.map = () => { if (mapDay == null) mapDay = curIdx(); return `<div class="mapwrap"><div id="leaflet" aria-label="מפת המסלול"></div>
   <button class="icon-btn map-loc" data-act="locate" aria-label="המיקום שלי">${ic('locate')}</button>
   <div class="msheet" data-state="${mapSheet}">${mapSheetInner()}</div></div>`; };
-const LAYER_NAME = { food: 'טבעוני וללא גלוטן', bars: 'ברים', tops: 'המלצות', saved: 'שמורים' };
+// Map layers you can turn on together with the day's route
+const MAP_LAYERS = [['gems', '💎 פנינים', '#2453C9'], ['food', 'טבעוני וללא גלוטן', '#1E9E8F'], ['shop', 'אופנה וקניות', '#D99400'], ['recs', 'ברים והמלצות', '#C2417F'], ['saved', 'שמורים', '#8A5CD0']];
+let mapLayers = new Set();
+const routePts = () => (typeof mapDay === 'number' ? S.days[mapDay].stops.filter((x) => hasGeo(x) && !x.hotelRef) : []);
+function layerItems(k) {
+  const P = routePts(); const col = MAP_LAYERS.find((l) => l[0] === k)[2];
+  const dist = (x) => (P.length ? Math.min(...P.map((p) => km(p, x))) : 0);
+  let arr = [];
+  if (k === 'gems') arr = allGems().filter((g) => S.gems[g.id] !== 'no').map((g) => ({ id: 'Lg' + g.id, rec: gemRec(g).id, name: g.name, kind: g.kind, lat: g.lat, lng: g.lng, gem: g.id, note: g.score ? `ציון ${g.score.toFixed(1)} · ${g.he || g.area}` : `🌍 Wikivoyage · ${g.area}` }));
+  if (k === 'food') arr = T.discover.food.map((d, i) => reg({ id: 'cfood' + i, ...d, what: '', verified: true })).filter((r) => isVeganGF(r) && hasGeo(r)).map((r) => ({ id: 'L' + r.id, rec: r.id, name: r.name, kind: 'food', lat: r.lat, lng: r.lng, note: r.note }));
+  if (k === 'recs') arr = [...T.discover.bars.map((d, i) => reg({ id: 'cbars' + i, ...d, what: '' })), ...T.discover.tops.map((d, i) => reg({ id: 'ctops' + i, ...d, what: '' }))].filter(hasGeo).map((r) => ({ id: 'L' + r.id, rec: r.id, name: r.name, kind: r.kind, lat: r.lat, lng: r.lng, note: r.note }));
+  if (k === 'saved') arr = S.saved.filter(hasGeo).filter((x) => !linkedStop(x)).map((x) => ({ id: 'Ls' + x.id, saved: x.id, name: x.name || x.title, kind: x.kind || 'star', lat: x.lat, lng: x.lng, note: 'מהשמורים' }));
+  if (k === 'shop') {
+    if (!P.length || !window.Enrich) return [];
+    const res = loadLive('shop', { pts: P, name: '', di: mapDay });
+    arr = (res.items || []).filter(hasGeo).map((r) => ({ id: 'L' + r.id, rec: r.id, name: r.name, kind: 'shop', lat: r.lat, lng: r.lng, note: whatHe(r) || 'חנות' }));
+    if (res.loading) arr.loading = true;
+  }
+  const out = arr.filter((x) => !inRoute(x)).map((x) => ({ ...x, layer: k, color: col, d: dist(x) })).sort((p, q) => p.d - q.d).slice(0, k === 'gems' ? 40 : 30);
+  out.loading = arr.loading; return out;
+}
+const overlayItems = () => [...mapLayers].flatMap(layerItems);
+const ovHref = (x) => (x.saved ? `#place/s/${x.saved}` : `#place/r/${x.rec}`);
+function ovCard(sel) {
+  const g = sel.gem && gemById(sel.gem); const L = MAP_LAYERS.find((l) => l[0] === sel.layer);
+  return `<div class="ms-sel ov"><div class="row"><span class="tile" style="--c:${sel.color}">${ic(sel.kind)}</span><div class="grow"><b>${esc(sel.name)}</b><div class="muted">${L[1]}${sel.d ? ` · ${fmtKm(sel.d)} מהמסלול` : ''}</div></div>${g && g.score ? `<span class="gem-sc big">${g.score.toFixed(1)}</span>` : ''}<button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
+    ${g ? `<div class="li-tags">${gemTags(g)}${popDots(g.wiki ? gemPv[g.wiki] : null)}</div><p class="gem-bg sm">${esc(cut(gemBg(g), 170))}</p>${g.go ? `<div class="gem-why"><b>למה ללכת</b>${esc(g.go)}</div>` : ''}${gemFacts(g)}` : sel.note ? `<div class="muted">${esc(cut(sel.note, 120))}</div>` : ''}
+    <div class="row"><button class="btn sun sm grow" data-act="mapAddOv" data-id="${sel.id}">${ic('plus')}לשלב ביום ${META[mapDay].short}</button><a class="btn soft sm" href="${ovHref(sel)}">${ic('pin')}פרטים</a><a class="btn soft sm" href="${gmDir(null, sel, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('walk')}</a></div>
+    ${g ? `<button class="lnk muted" data-act="mapGemNo" data-id="${sel.id}" style="align-self:flex-start">לא בשבילי, להסתיר</button>` : ''}</div>`;
+}
 function mapSheetInner() {
-  const items = mapStops().filter(hasGeo); const sel = mapSel && items.find((x) => x.id === mapSel);
-  const title = typeof mapDay === 'number' ? `${META[mapDay].short} ${META[mapDay].num}.12 · ${META[mapDay].title}` : LAYER_NAME[mapDay];
-  const link = (x) => (typeof mapDay === 'number' ? `#place/${mapDay}/${x.id}` : mapDay === 'saved' ? `#place/s/${x.id.slice(1)}` : null);
-  return `<div class="ms-top" data-act="msToggle"><div class="grab"></div><div class="row"><b class="grow">${esc(title)}</b><span class="muted">${items.length} מקומות</span></div></div>
-    ${typeof mapDay === 'number' ? `<div class="edrow"><button class="chipbtn" data-act="mapSort">${ic('sort')}סדר לי את היום</button><button class="chipbtn" data-act="placeAdd" data-d="${mapDay}">${ic('plus')}הוסף מקום</button><span class="muted grow">או לחיצה ארוכה במפה</span></div>` : ''}
-    ${sel ? `<div class="ms-sel"><div class="row"><span class="tile" style="--c:${sel.color}">${ic(sel.kind)}</span><div class="grow"><b>${esc(sel.name)}</b><div class="muted">${esc(sel.note || '')}</div></div><button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
-      <div class="row"><a class="btn sun sm grow" href="${gmDir(null, sel, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft sm grow" href="${gmDir(null, sel, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה</a>${link(sel) ? `<a class="btn soft sm" href="${link(sel)}">על המקום</a>` : ''}</div>
-      ${typeof mapDay === 'number' ? `<div class="edrow"><button class="chipbtn" data-act="mapMove" data-dir="-1" aria-label="מוקדם יותר">${ic('up')}מוקדם</button><button class="chipbtn" data-act="mapMove" data-dir="1" aria-label="מאוחר יותר">${ic('down')}מאוחר</button><button class="chipbtn" data-act="mapToDay">${ic('list')}ליום אחר</button><button class="chipbtn" data-act="mapEdit">${ic('pen')}עריכה</button>${sel.hotelRef ? '' : `<button class="chipbtn danger" data-act="mapDel">${ic('trash')}</button>`}</div>
-      <span class="muted">אפשר גם לגרור את הסמן במפה כדי להזיז את המקום.</span>` : ''}</div>` : ''}
+  const items = mapStops().filter(hasGeo); const ov = overlayItems();
+  const sel = mapSel && (items.find((x) => x.id === mapSel) || ov.find((x) => x.id === mapSel));
+  const title = `${META[mapDay].short} ${META[mapDay].num}.12 · ${META[mapDay].title}`;
+  const groups = [...mapLayers].map((k) => { const L = MAP_LAYERS.find((l) => l[0] === k); const list = ov.filter((x) => x.layer === k); const ld = k === 'shop' && layerItems('shop').loading; return `<div class="ms-h" style="--c:${L[2]}"><span class="dot"></span>${L[1]}<span class="muted">${ld ? 'מחפש…' : `${list.length} ליד המסלול`}</span></div>${list.length ? `<div class="list">${list.slice(0, 15).map((x) => `<div class="li ${x.id === mapSel ? 'sel' : ''}" data-act="mapPick" data-id="${x.id}"><span class="tile" style="--c:${x.color}">${ic(x.kind)}</span><div class="grow"><div class="li-t">${esc(x.name)}</div><div class="li-m">${esc(cut(x.note || '', 46))}${x.d ? ` · ${fmtKm(x.d)}` : ''}</div></div><button class="add" data-act="mapAddOv" data-id="${x.id}" aria-label="לשלב ביום">${ic('plus')}</button></div>`).join('')}</div>` : ''}`; }).join('');
+  return `<div class="ms-top" data-act="msToggle"><div class="grab"></div><div class="row"><b class="grow">${esc(title)}</b><span class="muted">${items.length} במסלול${ov.length ? ` · ${ov.length} בשכבות` : ''}</span></div></div>
+    ${sel ? (sel.layer ? ovCard(sel) : `<div class="ms-sel"><div class="row"><span class="ms-n" style="--c:${sel.color}">${items.indexOf(sel) + 1}</span><span class="tile" style="--c:${sel.color}">${ic(sel.kind)}</span><div class="grow"><b>${esc(sel.name)}</b><div class="muted">${esc(sel.note || '')}</div></div><button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
+      <div class="row"><a class="btn sun sm grow" href="${gmDir(null, sel, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft sm grow" href="${gmDir(null, sel, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה</a><a class="btn soft sm" href="#place/${mapDay}/${sel.id}">על המקום</a></div>
+      <div class="edrow"><button class="chipbtn" data-act="mapMove" data-dir="-1" aria-label="מוקדם יותר">${ic('up')}מוקדם</button><button class="chipbtn" data-act="mapMove" data-dir="1" aria-label="מאוחר יותר">${ic('down')}מאוחר</button><button class="chipbtn" data-act="mapToDay">${ic('list')}ליום אחר</button><button class="chipbtn" data-act="mapEdit">${ic('pen')}עריכה</button>${sel.hotelRef ? '' : `<button class="chipbtn danger" data-act="mapDel">${ic('trash')}</button>`}</div>
+      <span class="muted">אפשר גם לגרור את הסמן במפה כדי להזיז את המקום.</span></div>`) : ''}
     <div class="ms-days">${META.map((d, k) => `<button class="${k === mapDay ? 'on' : ''}" style="--c:${d.color}" data-act="mapDay" data-i="${k}"><b>${d.num}</b><span>${d.short}</span></button>`).join('')}</div>
-    <div class="cats">${[['food', 'טבעוני', '#1E9E8F'], ['bars', 'ברים', '#C2417F'], ['tops', 'המלצות', '#13213D'], ['saved', 'שמורים', '#D99400']].map(([k, t, c]) => `<button class="pill ${mapDay === k ? 'on' : ''}" style="--c:${c}" data-act="mapDay" data-i="${k}">${t}</button>`).join('')}</div>
-    <div class="list">${items.map((x, n) => `<div class="li ${x.id === mapSel ? 'sel' : ''}" data-act="mapPick" data-id="${x.id}"><span class="tile" style="--c:${x.color}">${ic(x.kind)}${isLayer() ? '' : `<i>${n + 1}</i>`}</span><div class="grow"><div class="li-t">${esc(x.name)}</div>${x.note ? `<div class="li-m">${esc(cut(x.note, 50))}</div>` : ''}</div><span class="chev">‹</span></div>`).join('') || '<div class="li muted">אין כאן מקומות עם מיקום.</div>'}</div>`;
+    <div class="ms-lays"><span class="muted">להציג גם:</span>${MAP_LAYERS.map(([k, t, c]) => `<button class="pill ${mapLayers.has(k) ? 'on' : ''}" style="--c:${c}" data-act="mapLayer" data-k="${k}" aria-pressed="${mapLayers.has(k)}">${mapLayers.has(k) ? '✓ ' : ''}${t}</button>`).join('')}</div>
+    <div class="edrow"><button class="chipbtn" data-act="mapSort">${ic('sort')}סדר לי את היום</button><button class="chipbtn" data-act="placeAdd" data-d="${mapDay}">${ic('plus')}הוסף מקום</button><span class="muted grow">או לחיצה ארוכה במפה</span></div>
+    <div class="ms-h" style="--c:${META[mapDay].color}"><span class="dot"></span>המסלול של היום</div>
+    <div class="list">${items.map((x, n) => `<div class="li ${x.id === mapSel ? 'sel' : ''}" data-act="mapPick" data-id="${x.id}"><span class="ms-n" style="--c:${x.color}">${n + 1}</span><span class="tile" style="--c:${x.color}">${ic(x.kind)}</span><div class="grow"><div class="li-t">${esc(x.name)}</div>${x.note ? `<div class="li-m">${esc(cut(x.note, 50))}</div>` : ''}</div><span class="chev">‹</span></div>`).join('') || '<div class="li muted">אין ביום הזה מקומות עם מיקום.</div>'}</div>
+    ${groups}`;
 }
 function addHereSheet(lat, lng) {
   haptic(15);
@@ -625,13 +655,11 @@ function bindMapSheet() {
   });
 }
 let mapDay = null, mapSel = null, meMarker = null;
-const LAYER = { food: '#1E9E8F', bars: '#C2417F', tops: '#13213D' };
 function mapStops() {
-  if (LAYER[mapDay]) return T.discover[mapDay].map((t, k) => ({ ...t, id: mapDay + k, color: LAYER[mapDay] }));
-  if (mapDay === 'saved') return S.saved.map((x) => { const l = linkedStop(x); return { ...x, lat: x.lat ?? (l && l.st.lat), lng: x.lng ?? (l && l.st.lng), name: x.name || x.title, note: l ? 'מהשמורים · ביום ' + META[l.di].short : 'מהשמורים', kind: x.kind || 'star', id: 's' + x.id, color: '#D99400' }; }).filter(hasGeo);
-  const d = mapDay ?? curIdx(); return S.days[d].stops.map((s) => ({ ...s, color: META[d].color }));
+  if (typeof mapDay !== 'number') mapDay = curIdx();
+  return S.days[mapDay].stops.map((s) => ({ ...s, color: META[mapDay].color }));
 }
-const isLayer = () => typeof mapDay === 'string';
+const isLayer = () => false;
 function mountMap() {
   if (!window.L) { $('#leaflet').innerHTML = '<div class="section muted">המפה צריכה חיבור לאינטרנט.</div>'; return; }
   if (mapDay == null) mapDay = curIdx();
@@ -657,7 +685,11 @@ function drawMarkers(fit) {
     if (!isLayer()) mk.on('dragend', () => { const st = S.days[mapDay].stops.find((x) => x.id === s.id); if (!st) return; const old = { lat: st.lat, lng: st.lng }; const ll = mk.getLatLng(); st.lat = ll.lat; st.lng = ll.lng; delete st.details; delete st.osm; save(); drawMarkers(false); renderMapSheet(); haptic(10); toast(`${st.name} הוזז`, () => { st.lat = old.lat; st.lng = old.lng; save(); drawMarkers(false); renderMapSheet(); }); enrichStop(st, true); });
     line.push([s.lat, s.lng]);
   });
-  if (!isLayer() && line.length > 1) L.polyline(line, { color: pts[0].color, weight: 4, dashArray: '2 10', lineCap: 'round' }).addTo(layer);
+  if (line.length > 1) L.polyline(line, { color: pts[0].color, weight: 4, dashArray: '2 10', lineCap: 'round' }).addTo(layer);
+  overlayItems().forEach((o) => {
+    const icon = L.divIcon({ className: '', html: `<div class="mk ov ${o.id === mapSel ? 'sel' : ''}" style="--c:${o.color}">${ic(o.kind)}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
+    L.marker([o.lat, o.lng], { icon, title: o.name, zIndexOffset: -100 }).addTo(layer).on('click', () => { mapSel = o.id; if (mapSheet === 'peek') mapSheet = 'half'; drawMarkers(false); renderMapSheet(); haptic(6); });
+  });
   if (fit && line.length) map.fitBounds(line, { paddingTopLeft: [40, 40], paddingBottomRight: [40, 200], maxZoom: 15 });
 }
 function rerenderMapOverlay() { renderMapSheet(); }
@@ -759,7 +791,7 @@ function warmGems() {
   setTimeout(loadVoyage, 1500);
 }
 let gemDragging = false;
-function gemRefresh() { if (gemDragging) return; if (location.hash === '#discover') render(); }
+function gemRefresh() { if (gemDragging) return; if (location.hash === '#discover') render(); else if (location.hash === '#map' && mapLayers.has('gems')) { drawMarkers(false); renderMapSheet(); } }
 const fmtPv = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} מיליון` : n >= 1000 ? `${Math.round(n / 1000)} אלף` : String(n));
 function gemTags(g) {
   const pv = g.wiki ? gemPv[g.wiki] : null; const t = [];
@@ -814,11 +846,11 @@ function gemCard(g) {
     <div class="gem-acts"><button class="gx" data-act="gemNo" data-id="${g.id}">✕<span>לא בשבילי</span></button><button class="gs" data-act="gemSave" data-id="${g.id}">★<span>שמור</span></button><button class="gd" data-act="gemDay" data-id="${g.id}" data-d="${n ? n.di : curIdx()}">+<span>ליום ${META[n ? n.di : curIdx()].short}</span></button></div>
   </article>`;
 }
-function gemRow(g) {
+function gemRow(g, day) {
   const n = gemNear(g); const img = g.wiki ? gemImgs[g.wiki] : gemPhotos[g.id] || ''; const r = gemRec(g); const st = inRoute(r);
   return `<div class="li">${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">` : `<span class="tile" style="--c:#2453C9">${ic(g.kind)}</span>`}
     <a class="grow li-main" href="#place/r/g_${g.id}" data-act="gemOpen" data-id="${g.id}"><div class="li-t">${esc(g.name)}</div><div class="li-m">${g.score ? `<b class="gem-sc">${g.score.toFixed(1)}</b> · ` : '🌍 Wikivoyage · '}${n ? `ליד יום ${META[n.di].short} · ${fmtKm(n.d)}` : esc(g.area)}</div><div class="li-tags">${gemTags(g)}</div></a>
-    ${st ? `<span class="li-done">✓ ${META[st.di].short}</span>` : `<button class="add" data-act="recAdd" data-id="g_${g.id}" aria-label="הוסף למסלול">${ic('plus')}</button>`}</div>`;
+    ${st ? `<span class="li-done">✓ ${META[st.di].short}</span>` : `<button class="add" data-act="recAdd" data-id="g_${g.id}" ${day != null ? `data-d="${day}"` : ''} aria-label="הוסף למסלול">${ic('plus')}</button>`}</div>`;
 }
 function gemsView() {
   warmGems();
@@ -831,7 +863,7 @@ function gemsView() {
     <div class="row"><span class="muted grow">${q.length ? `${q.length} לגלות` : 'עברת על הכל'}${yes ? ` · שמרת ${yes}` : ''}</span><button class="chipbtn" data-act="gemView">${gemView === 'deck' ? `${ic('list')}רשימה` : `${ic('star')}כרטיסים`}</button></div>`;
   let body;
   if (!q.length) body = `<div class="card gem-end"><b>אין עוד פנינים כאן</b><span class="muted">${gemCat !== 'all' || gemDayF != null ? 'נסה קטגוריה אחרת או את כל העיר.' : 'עברת על כל הרשימה.'}</span>${no ? `<button class="btn soft sm" data-act="gemReset">להחזיר את ${no} שדילגתי עליהם</button>` : ''}${yes ? '<a class="btn soft sm" href="#saved">לשמורים ★</a>' : ''}</div>`;
-  else if (gemView === 'list') body = recList(q.map(gemRow));
+  else if (gemView === 'list') body = recList(q.map((g) => gemRow(g)));
   else body = gemCard(q[0]) + (q[1] ? `<div class="gem-next muted">הבא: ${esc(q[1].name)}</div>` : '');
   const foot = `<span class="muted" style="font-size:12px">הציון והטקסטים: מחקר שלנו מוויקיפדיה, Wikivoyage ומדריכי טיול. "פנינה נסתרת" לפי כמה מבקרים יש ולפי כמה קוראים את הערך בוויקיפדיה. מחירים ושעות בערך, כדאי לבדוק לפני.</span>${voyageState === 'err' ? '<span class="muted" style="font-size:12px">Wikivoyage לא ענה כרגע. ננסה שוב בפעם הבאה.</span>' : ''}`;
   return head + body + (no && q.length ? `<button class="lnk muted" data-act="gemReset" style="align-self:flex-start">דילגת על ${no} · להחזיר</button>` : '') + foot;
@@ -939,7 +971,7 @@ async function identify(x, text) {
 }
 function addSavedToDay(x, di) {
   const ns = { id: uid(), kind: x.kind || 'star', name: x.name || x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat ?? null, lng: x.lng ?? null, osm: x.osm || null, url: x.url, savedId: x.id };
-  if (x.details) ns.details = x.details; if (x.wikiFixed) ns.wikiFixed = x.wikiFixed;
+  if (x.details) ns.details = x.details; if (x.wikiFixed) ns.wikiFixed = x.wikiFixed; if (x.gem) ns.gem = x.gem;
   S.days[di].stops.push(ns); x.day = META[di].short; save(); render();
   if (!ns.details) enrichStop(ns, true);
   if (!hasGeo(ns)) { identifySheet(x); toast('נוסף. בוא נזהה את המקום כדי שיופיע במפה ובניווט'); } else toast(`נוסף ליום ${META[di].short} · מופיע במסלול, במפה ובניווט`);
@@ -1595,11 +1627,13 @@ const A = {
   liveRetry: () => { const c = liveArea(); delete live[liveKey(liveCat, c)]; try { localStorage.removeItem('bcn.live:' + liveKey(liveCat, c)); } catch (e) { /* ignore */ } render(); },
   ideas: (e) => {
     const i = +e.dataset.d; const D = ideasData(i);
-    sheet(`<h3>רעיונות להיום</h3><span class="muted">${META[i].short} ${META[i].num}.12 · לפי השעה, מזג האוויר ומה ששמרת</span>
+    sheet(`<h3>רעיונות להיום</h3><span class="muted">${META[i].short} ${META[i].num}.12 · פנינים, אירועים והמלצות ליד המסלול</span>
+      ${D.gems.length ? `<h2>💎 פנינים ליד המסלול</h2>${recList(D.gems.slice(0, 5).map((g) => gemRow(g, i)))}<div class="row"><button class="btn soft sm grow" data-act="gemsOnMap" data-d="${i}">${ic('pin')}להציג על המפה</button>${D.gems.length > 5 ? `<button class="btn soft sm grow" data-act="liveFrom" data-d="${i}">כל ה־${D.gems.length} ›</button>` : ''}</div>` : ''}
       ${D.evs.length ? `<h2>קורה היום ליד המסלול</h2>${recList(D.evs.map(({ e: ev, d }) => recRow({ r: evRec(ev), d: 0, o: null }, 0, { why: `${ev.he} · ${ev.hours}${ev.approx ? ' · תאריכים משוערים' : ''} · ${fmtKm(d)}`, color: '#D99400', day: i })))}` : ''}
       ${D.recs.length ? `<h2>המלצות</h2>${recList(D.recs.map((o, n) => recRow({ r: o.r, d: 0, o: openState(o.r) }, n, { why: o.why, color: o.color, day: i })))}` : ''}
-      <button class="btn soft" data-act="liveFrom" data-d="${i}" data-id="all">💎 פנינים ליד המסלול ›</button>`);
+      `);
   },
+  gemsOnMap: (e) => { closeSheet(); mapDay = +e.dataset.d; mapLayers.add('gems'); warmGems(); mapSel = null; location.hash = '#map'; },
   gemCat: (e) => { gemCat = e.dataset.t; withTransition('tab', render); },
   wvRetry: () => { voyageState = ''; loadVoyage(); render(); },
   gemView: () => { gemView = gemView === 'deck' ? 'list' : 'deck'; withTransition('tab', render); },
@@ -1652,7 +1686,7 @@ const A = {
   },
   nearMe: () => { if (!navigator.geolocation) { toast('אין גישה למיקום'); return; } navigator.geolocation.getCurrentPosition((p) => { here = { lat: p.coords.latitude, lng: p.coords.longitude }; render(); }, () => toast('לא קיבלתי הרשאה למיקום')); },
   sortApply: () => { const { i, ids } = sheetCtx; S.days[i].stops = ids.map((id) => S.days[i].stops.find((s) => s.id === id)); save(); closeSheet(); render(); toast('הסדר עודכן'); },
-  mapDay: (e) => { mapDay = /^\d+$/.test(e.dataset.i) ? +e.dataset.i : e.dataset.i; mapSel = null; drawMarkers(true); rerenderMapOverlay(); },
+  mapDay: (e) => { mapDay = +e.dataset.i; mapSel = null; drawMarkers(true); rerenderMapOverlay(); },
   mapClose: () => { mapSel = null; renderMapSheet(); },
   mapMove: (e) => { const a = S.days[mapDay].stops; const i = a.findIndex((x) => x.id === mapSel); const j = i + +e.dataset.dir; if (i < 0 || j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; save(); drawMarkers(false); renderMapSheet(); },
   mapToDay: () => { const from = mapDay; const st = S.days[from].stops.find((x) => x.id === mapSel); if (!st) return; daySheet((di) => { if (di === from) return; S.days[from].stops = S.days[from].stops.filter((x) => x.id !== st.id); S.days[di].stops.push(st); save(); mapSel = null; drawMarkers(false); renderMapSheet(); toast(`${st.name} עבר ליום ${META[di].short}`, () => { S.days[di].stops = S.days[di].stops.filter((x) => x.id !== st.id); S.days[from].stops.push(st); save(); drawMarkers(false); renderMapSheet(); }); }); },
@@ -1666,7 +1700,15 @@ const A = {
     S.days[c.day].stops.push(ns); save(); closeSheet(); mapDay = c.day; mapSel = ns.id; drawMarkers(false); renderMapSheet(); toast(`נוסף ליום ${META[c.day].short}`); enrichStop(ns, true);
   },
   msToggle: () => { mapSheet = mapSheet === 'peek' ? 'half' : 'peek'; const el = $('.msheet'); if (el) el.dataset.state = mapSheet; },
-  mapPick: (e) => { const x = mapStops().find((o) => o.id === e.dataset.id); if (!x) return; mapSel = x.id; mapSheet = 'half'; renderMapSheet(); if (map) map.flyTo([x.lat, x.lng], Math.max(map.getZoom(), 16), { duration: 0.6 }); haptic(6); },
+  mapLayer: (e) => { const k = e.dataset.k; if (mapLayers.has(k)) mapLayers.delete(k); else { mapLayers.add(k); if (k === 'gems') warmGems(); } mapSel = null; drawMarkers(false); renderMapSheet(); haptic(6); },
+  mapAddOv: (e) => {
+    const x = overlayItems().find((o) => o.id === e.dataset.id); if (!x) return; const di = mapDay;
+    if (x.saved) { const sv = S.saved.find((o) => o.id === x.saved); if (sv) addSavedToDay(sv, di); }
+    else { const r = REC[x.rec]; if (!r) return; const ns = recStop(r); S.days[di].stops.push(ns); if (x.gem) S.gems[x.gem] = 'yes'; save(); mapSel = ns.id; drawMarkers(false); renderMapSheet(); toast(`${cut(x.name, 22)} נוסף ליום ${META[di].short}`, () => { S.days[di].stops = S.days[di].stops.filter((o) => o.id !== ns.id); if (x.gem) delete S.gems[x.gem]; save(); mapSel = null; drawMarkers(false); renderMapSheet(); }); enrichStop(ns, true); }
+    haptic(12);
+  },
+  mapGemNo: (e) => { const x = overlayItems().find((o) => o.id === e.dataset.id); if (!x || !x.gem) return; S.gems[x.gem] = 'no'; save(); mapSel = null; drawMarkers(false); renderMapSheet(); toast(`${cut(x.name, 24)} הוסתר`, () => { delete S.gems[x.gem]; save(); drawMarkers(false); renderMapSheet(); }); },
+  mapPick: (e) => { const x = mapStops().find((o) => o.id === e.dataset.id) || overlayItems().find((o) => o.id === e.dataset.id); if (!x) return; mapSel = x.id; mapSheet = 'half'; drawMarkers(false); renderMapSheet(); if (map) map.flyTo([x.lat, x.lng], Math.max(map.getZoom(), 16), { duration: 0.6 }); haptic(6); },
   locate: () => {
     if (!navigator.geolocation) { toast('אין גישה למיקום'); return; }
     navigator.geolocation.getCurrentPosition((p) => { const ll = [p.coords.latitude, p.coords.longitude]; if (meMarker) meMarker.remove(); meMarker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="mk me"></div>', iconSize: [18, 18] }) }).addTo(map); map.setView(ll, 15); }, () => toast('לא קיבלתי הרשאה למיקום'));

@@ -560,3 +560,25 @@ button.lnk { border: 0; background: none; font: inherit; cursor: pointer; paddin
 .gem-lbl { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: -4px; }
 .pill.wvp:not(.on) { color: #137A6E; border-color: #137A6E; }
 .wv-note { font-size: 13px; line-height: 1.5; background: #EAF6F3; }
+/* v24: map layers, roomy timeline */
+.ms-n { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--c); color: #fff; font: 800 12px/24px var(--body); text-align: center; }
+.msheet .li .ms-n + .tile { margin-inline-start: -2px; }
+.ms-lays { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ms-lays .muted { font-size: 12px; font-weight: 700; margin-inline-end: 2px; }
+.ms-h { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; margin-top: 4px; }
+.ms-h .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.ms-h .muted { font-weight: 500; font-size: 12px; }
+.mk.ov { width: 28px; height: 28px; border-radius: 50%; border-width: 2px; opacity: .92; }
+.mk.ov svg { width: 15px; height: 15px; }
+.mk.ov.sel { transform: scale(1.35); opacity: 1; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent), 0 3px 8px rgba(0,0,0,.3); }
+.ms-sel.ov { background: #fff; border: 1.5px solid var(--line); }
+.gem-bg.sm { font-size: 14px; }
+.tstop, .tleg { grid-template-columns: 34px 1fr; gap: 8px; }
+.tline::before { inset-inline-start: 16px; }
+.tc { align-items: center; gap: 10px; }
+.tkind.tk-lg { width: 40px; height: 40px; border-radius: 12px; flex: none; vertical-align: 0; margin: 0; align-self: flex-start; }
+.tkind.tk-lg svg { width: 22px; height: 22px; }
+.ttime { font: 700 12px var(--body); color: var(--day); text-align: right; }
+.ms-sel .row { align-items: center; } .ms-sel .gem-sc.big { font-size: 20px; }
+.tc > .tkind.tk-lg { height: 40px; min-height: 0; align-self: center; }
+.tc > .tkind.tk-lg svg { width: 22px !important; height: 22px !important; }
