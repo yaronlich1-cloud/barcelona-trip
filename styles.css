@@ -643,3 +643,24 @@ a.li { text-decoration: none; color: inherit; }
 .gbar { display: flex; gap: 8px; flex-wrap: wrap; }
 .jend.card { display: flex; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; }
 a.chip { text-decoration: none; }
+/* v31: live trip day */
+.live { margin: 14px 16px 0; background: var(--day); color: #fff; border-radius: 26px 26px 26px 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 26px color-mix(in srgb, var(--day) 30%, transparent); }
+.lv-top { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; opacity: .95; }
+.lv-top .dot { width: 9px; height: 9px; border-radius: 50%; background: #fff; animation: lvPulse 1.6s ease-in-out infinite; }
+@keyframes lvPulse { 50% { opacity: .35; transform: scale(.75); } }
+.lv-gps { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; opacity: .7; }
+.lv-gps.on { opacity: 1; }
+.lv-gps svg { width: 13px; height: 13px; }
+.lv-next { font-size: 21px; line-height: 1.2; }
+.lv-next .muted { color: rgba(255,255,255,.75); font-size: 13px; font-weight: 700; }
+.lv-sub { font-size: 13px; opacity: .92; }
+.live .btn.ghost { background: rgba(255,255,255,.18); color: #fff; border-color: transparent; }
+.lv-late, .lv-free { background: rgba(255,255,255,.16); border-radius: 14px; padding: 9px 10px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.lv-free .lnk { color: #fff; }
+.lv-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.live .chipbtn { background: #fff; color: var(--ink); border-color: transparent; }
+.lv-sugs { padding-top: 10px !important; gap: 8px; }
+.lv-sug { display: flex; gap: 10px; align-items: flex-start; background: #fff; border-radius: 16px; padding: 10px; border-inline-start: 4px solid var(--c); box-shadow: 0 1px 2px rgba(30,30,40,.04), 0 4px 14px rgba(30,30,40,.05); animation: rise .3s var(--ease) both; }
+.lv-sug b { font-size: 14px; }
+.lv-sug .muted { font-size: 13px; margin: 2px 0 6px; }
+.fab.cam { bottom: calc(146px + env(safe-area-inset-bottom)); background: #fff; color: var(--ink); box-shadow: 0 6px 16px rgba(19,33,61,.16); }

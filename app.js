@@ -90,7 +90,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '30 · 13.11';
+const VERSION = '31 · 13.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -181,7 +181,7 @@ function dayNavUrls(di) {
 // Every day starts and ends at the hotel (when its location is known)
 const hotelPt = () => (S.hotel && S.hotel.lat != null ? { id: 'hotel', kind: 'hotel', name: S.hotel.name || 'המלון', lat: S.hotel.lat, lng: S.hotel.lng } : null);
 function hotelLeg(a, b) { const L = legInfo(a, b); const mode = L.rec; return { mode, min: (mode === 'walk' ? L.walk : L.transit) || 0 }; }
-function schedule(di) {
+function schedule(di, live) {
   const day = S.days[di]; const date = META[di].date; const start = toMin(S.dayStart[di]) ?? 570; let t = start; const out = [];
   const H = hotelPt(); const geo = day.stops.filter(hasGeo);
   out.start = start; out.out = H && geo.length ? hotelLeg(H, day.stops.find(hasGeo)) : null;
@@ -189,6 +189,7 @@ function schedule(di) {
     let travel = 0;
     if (si === 0 && out.out && hasGeo(s)) { travel = out.out.min; t += travel; }
     if (si > 0) { const pv = day.stops[si - 1]; const L = legInfo(pv, s); const mode = S.legs[pv.id + '>' + s.id] || L.rec; travel = (mode === 'walk' ? L.walk : L.transit) || 15; t += travel; }
+    if (live && si === live.from) { travel = live.travel; t = live.arrive; }
     let arrive = t, wait = 0, late = 0; const fx = toMin(s.time);
     if (fx != null) { if (arrive < fx) { wait = fx - arrive; arrive = fx; } else if (arrive > fx) late = arrive - fx; }
     const dur = durOf(s); const leave = arrive + dur; let closed = '';
@@ -514,9 +515,7 @@ V.today = () => {
   if (needB.length) alerts.push(`<a class="alert" href="#tickets">${ic('ticket')}<span class="grow">להזמין מראש: ${needB.map((x) => esc(x.name)).join(', ')}</span><span class="mini">לכרטיסים</span></a>`);
   const idea = ideasData(i);
   const ideasBar = idea.recs.length || idea.evs.length || idea.gems.length ? `<button class="ideas" data-act="ideas" data-d="${i}"><span class="tile" style="--c:#2453C9">${ic('star')}</span><span class="grow"><b>רעיונות להיום</b><span class="muted">${[idea.gems.length ? `💎 ${idea.gems.length} פנינים` : '', idea.evs.length ? `${idea.evs.length} אירועים` : '', idea.recs.length ? `${idea.recs.length} המלצות לפי השעה` : ''].filter(Boolean).join(' · ')}</span></span><span class="chev">›</span></button>` : '';
-  const plan = schedule(i);
-  // "Next up" only on the trip day itself, by the Barcelona clock
-  const nowMin = cityNowMin().min; const nxP = todayIdx() === i ? plan.find((P) => P.leave > nowMin && !P.s.visited) : null; const nx = nxP ? nxP.s : null;
+  const L = liveState(i); const plan = L ? L.plan : schedule(i);
   let list = '';
   day.stops.forEach((s, si) => {
     const cn = closedNote(s, m.date); const P = plan[si];
@@ -540,8 +539,7 @@ V.today = () => {
   <div class="head"><span class="eyebrow">יום ${i + 1} מתוך 5 · ${m.short} ${m.num}.12</span><h1>${esc(m.title)}</h1><a class="srch-btn" href="#search" aria-label="חיפוש מקום">${ic('search')}<span>חיפוש</span></a></div>
   <div class="days" role="tablist" aria-label="ימי הטיול"><span class="dind" style="--x:${lastDay ?? i};--c:${m.color}"></span>${META.map((d, k) => `<button class="dayb ${k === i ? 'on' : ''}" style="--c:${d.color}" role="tab" aria-selected="${k === i}" data-act="day" data-i="${k}"><b>${d.num}</b><span>${d.short}</span>${weather && weather[d.date] ? `<i>${weather[d.date].max}°</i>` : ''}</button>`).join('')}</div>
   ${installEvt && !standalone() ? `<div class="section"><button class="btn navy sm" data-act="install">${ic('plus')}התקן את האפליקציה בטלפון</button></div>` : ''}
-  ${nx ? `<div class="next pop"><div class="lbl"><span class="dot"></span>הבא בתור</div><div class="name">${esc(nx.name)}</div>
-    <div class="row"><a class="btn sun sm grow" href="${gmDir(null, nx, 'walking')}" target="_blank" rel="noopener">${ic('pin')}נווט</a><a class="btn ghost sm" href="#place/${i}/${nx.id}">על המקום</a></div></div>` : ''}
+  ${L ? liveCard(i, L) : ''}
   <div class="section">
     ${alerts.length > 1 ? `<button class="alert sum" data-act="alertsT">${ic('warn')}<span class="grow"><b>${alerts.length} דברים לבדוק היום</b></span><span class="chev">${alertsOpen ? '▴' : '▾'}</span></button>${alertsOpen ? `<div class="alerts-open">${alerts.join('')}</div>` : ''}` : alerts.join('')}
     ${ideasBar}
@@ -552,7 +550,7 @@ V.today = () => {
     ${hEnd}
     <div style="height:64px"></div>
   </div>
-  <button class="fab" data-act="placeAdd" data-d="${i}" aria-label="הוסף מקום">${ic('plus')}מקום</button>`;
+  <button class="fab" data-act="placeAdd" data-d="${i}" aria-label="הוסף מקום">${ic('plus')}מקום</button>${L ? `<button class="fab cam" data-act="moment" aria-label="רגע ליומן">${ic('camera')}רגע</button>` : ''}`;
 };
 
 // Ideas for the day: by the Barcelona clock, the weather, the first stop and what you saved
@@ -887,6 +885,132 @@ function bindGemSwipe() {
 }
 V.discover = () => pageHead('גלה את העיר', 'מקומות שכדאי להכיר, עם ציון ורקע להחלטה') + `<div class="section"><a class="srch-field" href="#search">${ic('search')}<span>חיפוש לפי שם: במסלול, בפנינים או ברשת</span></a>${gemsView()}</div>`;
 
+/* live: the trip day as it happens. Works while the app is open (a web app does not run in the background). */
+let liveHere = null, liveWatch = null, liveErr = false, liveLastRender = 0; const nearSince = {}, askedVisit = new Set(), liveDismiss = new Set();
+function startLive() {
+  if (liveWatch != null || !navigator.geolocation || todayIdx() < 0) return;
+  liveWatch = navigator.geolocation.watchPosition((p) => {
+    const prev = liveHere; liveHere = { lat: p.coords.latitude, lng: p.coords.longitude, at: Date.now() }; liveErr = false; onLiveMove(prev);
+  }, () => { liveErr = true; }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 30000 });
+}
+function stopLive() { if (liveWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(liveWatch); liveWatch = null; }
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopLive(); else startLive(); });
+function onLiveMove(prev) {
+  const i = todayIdx(); if (i < 0) return;
+  S.days[i].stops.forEach((s) => {
+    if (!hasGeo(s) || s.visited || s.hotelRef) return;
+    if (km(liveHere, s) < 0.08) { nearSince[s.id] = nearSince[s.id] || Date.now(); if (Date.now() - nearSince[s.id] > 3 * 60e3 && !askedVisit.has(s.id)) { if ($('#sheet').firstChild) return; askedVisit.add(s.id); visitPrompt(i, s); } } else delete nearSince[s.id];
+  });
+  const onToday = ['#today', ''].includes(location.hash);
+  if (onToday && !$('#sheet').firstChild && !document.querySelector('.tline.sorting') && (!prev || km(prev, liveHere) > 0.04 || Date.now() - liveLastRender > 60e3)) { liveLastRender = Date.now(); render(); }
+}
+function visitPrompt(di, s) {
+  haptic(20);
+  sheet(`<h3>ביקרת ב־${esc(s.name)}?</h3><span class="muted">אתה כאן כבר כמה דקות</span>
+    <button class="btn sun" data-act="liveVisited" data-d="${di}" data-id="${s.id}">${ic('check')}כן, ביקרתי</button>
+    <button class="btn soft" data-act="liveVisited" data-d="${di}" data-id="${s.id}" data-cam="1">${ic('camera')}כן, ולצלם רגע ליומן</button>
+    <button class="btn soft" data-act="closeSheet">עוד לא</button>`);
+}
+// The live plan: the next place you haven't visited, reached from where you are now
+function liveState(i) {
+  if (todayIdx() !== i) return null;
+  startLive();
+  const day = S.days[i]; const now = cityNowMin().min; const base = schedule(i);
+  const ni = day.stops.findIndex((s) => !s.visited);
+  if (ni < 0) return { plan: base, done: true, now };
+  const next = day.stops[ni]; let travel = 0, mode = 'walk';
+  if (liveHere && hasGeo(next)) { const g = legInfo(liveHere, next); mode = g.rec; travel = (mode === 'walk' ? g.walk : g.transit) || 0; }
+  const arrive = now + travel; const plan = schedule(i, { from: ni, arrive, travel });
+  return { plan, ni, next, travel, mode, now, arrive, delay: Math.round(arrive - base[ni].arrive), dist: liveHere && hasGeo(next) ? km(liveHere, next) : null };
+}
+function dropCandidate(i, L) {
+  const day = S.days[i];
+  const c = day.stops.map((s, k) => ({ s, k })).filter(({ s, k }) => k > L.ni && !s.visited && !s.time && !(s.booking && s.booking.booked) && !needsBooking(s) && s.kind !== 'food');
+  return c.length ? c[c.length - 1].s : null;
+}
+function liveSuggest(i, L) {
+  const out = []; if (L.done) return out;
+  const day = S.days[i]; const from = liveHere || L.next; const now = L.now;
+  // Meal time and no food stop coming up soon
+  const meal = (now >= 750 && now <= 870) || (now >= 1140 && now <= 1290);
+  const foodSoon = L.plan.some((P, k) => k >= L.ni && P.s.kind === 'food' && P.arrive - now < 80);
+  if (meal && !foodSoon && hasGeo(from) && !liveDismiss.has('meal')) {
+    const f = nearest(VEG_FOOD(), from, 1)[0];
+    if (f && f.dist < 2.5) { const r = reg({ id: 'cfood' + T.discover.food.findIndex((x) => x.name === f.name), ...T.discover.food.find((x) => x.name === f.name), what: '', verified: true }); out.push({ k: 'meal', c: '#1E9E8F', ic: 'food', t: 'זמן לאכול', b: `${f.name} · ${Math.round(f.dist * 1.3 / 4.8 * 60)} דק׳ ברגל ממך · טבעוני וללא גלוטן`, r }); }
+  }
+  // Rain soon and the next place is outside
+  const w = weather && weather[META[i].date]; const nextOut = ['park', 'view'].includes(L.next.kind);
+  const rainH = w && (w.hours || []).find((h) => h.h * 60 >= now - 60 && h.h * 60 <= now + 150 && h.p >= 60);
+  if (rainH && nextOut && hasGeo(L.next) && !liveDismiss.has('rain')) {
+    const g = window.GEMS.filter((x) => ['museum', 'church'].includes(x.kind) && S.gems[x.id] !== 'no' && !inRoute({ ...x })).map((x) => ({ x, d: km(L.next, x) })).sort((a, b) => a.d - b.d)[0];
+    if (g && g.d < 2) out.push({ k: 'rain', c: '#2453C9', ic: 'museum', t: `צפוי גשם בסביבות ${String(rainH.h).padStart(2, '0')}:00 (${rainH.p}%)`, b: `${L.next.name} בחוץ. במקום: ${g.x.he || g.x.name}, מקורה, ${fmtKm(g.d)} משם`, r: gemRec(g.x), swap: L.next.id });
+  }
+  // The next place will be closed when you get there
+  const P = L.plan[L.ni];
+  if (P && P.closed && hasGeo(L.next) && !liveDismiss.has('closed')) {
+    const g = allGems().filter((x) => S.gems[x.id] !== 'no' && !inRoute({ ...x })).map((x) => ({ x, d: km(L.next, x) })).sort((a, b) => a.d - b.d)[0];
+    if (g && g.d < 1.5) out.push({ k: 'closed', c: '#E8553D', ic: 'warn', t: `${L.next.name} סגור כשתגיע`, b: `חלופה קרובה: ${g.x.he || g.x.name}, ${fmtKm(g.d)} משם`, r: gemRec(g.x), swap: L.next.id });
+  }
+  return out.slice(0, 2);
+}
+function liveCard(i, L) {
+  const hh = (m) => fmtT(m);
+  if (L.done) { const H = hotelPt(); return `<div class="live pop"><div class="lv-top"><span class="dot"></span>עכשיו · ${hh(L.now)}</div><div class="lv-next">סיימת את היום 🎉</div>${H ? `<a class="btn sun sm" href="${gmDir(liveHere, H, 'walking')}" target="_blank" rel="noopener">${ic('hotel')}חזרה למלון</a>` : ''}</div>`; }
+  const n = L.next; const fx = toMin(n.time);
+  const where = liveHere ? (L.dist < 0.08 ? 'אתה כאן' : `${L.travel} דק׳ ${L.mode === 'walk' ? 'ברגל' : 'בתחבורה'} ממך`) : liveErr ? 'בלי מיקום: הזמנים לפי התוכנית' : 'מאתר את המיקום שלך…';
+  let late = '';
+  const base = schedule(i); const passed = S.days[i].stops.filter((s, k) => !s.visited && base[k] && base[k].leave < L.now - 20);
+  if (passed.length && !liveDismiss.has('passed')) {
+    late = `<div class="lv-late"><b>לפי התוכנית כבר עברת את: ${passed.map((s) => esc(cut(s.name, 18))).join(', ')}</b><div class="lv-opts"><button class="chipbtn" data-act="livePassed" data-ids="${passed.map((s) => s.id).join(',')}">${ic('check')}כן, ביקרתי</button><button class="chipbtn" data-act="liveX" data-k="passed">לא, אני מאחר</button></div></div>`;
+  } else if (L.delay >= 20 || (fx != null && L.arrive > fx)) {
+    const c = dropCandidate(i, L); const d = fx != null && L.arrive > fx ? L.arrive - fx : L.delay;
+    late = `<div class="lv-late"><b>אתה מאחר ב־${d} דק׳ לתוכנית</b><div class="lv-opts">
+      ${c ? `<button class="chipbtn" data-act="liveSkip" data-id="${c.id}">לוותר על ${esc(cut(c.name, 18))}</button>` : ''}
+      ${c && i < 4 ? `<button class="chipbtn" data-act="liveTomorrow" data-id="${c.id}">להעביר את ${esc(cut(c.name, 14))} ל${META[i + 1].short}</button>` : ''}
+      <button class="chipbtn" data-act="liveShorten" data-id="${n.id}" data-m="${d}">לקצר את ${esc(cut(n.name, 16))} ב־${Math.min(d, Math.max(0, durOf(n) - 20))} דק׳</button></div></div>`;
+  } else if (L.delay <= -30) late = `<div class="lv-free">יש לך כ־${-L.delay} דק׳ פנויות לפני ${esc(cut(n.name, 20))}. <button class="lnk" data-act="liveNear">מה יש לידי?</button></div>`;
+  const sug = liveSuggest(i, L).map((x) => `<div class="lv-sug" style="--c:${x.c}"><span class="tile" style="--c:${x.c}">${ic(x.ic)}</span><div class="grow"><b>${esc(x.t)}</b><div class="muted">${esc(x.b)}</div>
+    <div class="lv-opts">${x.swap ? `<button class="chipbtn" data-act="liveSwap" data-r="${x.r.id}" data-swap="${x.swap}">להחליף</button>` : `<button class="chipbtn" data-act="liveAddNow" data-r="${x.r.id}">להוסיף עכשיו</button>`}<a class="chipbtn" href="${gmDir(liveHere, x.r, 'walking')}" target="_blank" rel="noopener">${ic('walk')}נווט</a><a class="chipbtn" href="#place/r/${x.r.id}">פרטים</a></div></div>
+    <button class="icon-btn" data-act="liveX" data-k="${x.k}" aria-label="לא עכשיו">${ic('x')}</button></div>`).join('');
+  return `<div class="live pop"><div class="lv-top"><span class="dot"></span>עכשיו · ${hh(L.now)}<span class="grow"></span><span class="lv-gps ${liveHere ? 'on' : ''}">${ic('locate')}${liveHere ? 'מיקום חי' : liveErr ? 'אין מיקום' : '…'}</span></div>
+    <div class="lv-next"><span class="muted">הבא</span> <b>${esc(n.name)}</b></div>
+    <div class="lv-sub">${where}${fx != null ? ` · כניסה ב־${esc(n.time)}` : ''} · הגעה בערך <b dir="ltr">${hh(L.arrive)}</b></div>
+    <div class="row"><a class="btn sun sm grow" href="${gmDir(liveHere, n, 'walking')}" target="_blank" rel="noopener">${ic('walk')}נווט</a><button class="btn ghost sm" data-act="liveVisited" data-d="${i}" data-id="${n.id}">${ic('check')}ביקרתי</button><button class="btn ghost sm" data-act="liveNear">${ic('locate')}לידי</button></div>
+    ${late}</div>${sug ? `<div class="section lv-sugs">${sug}</div>` : ''}`;
+}
+function liveNearSheet() {
+  const i = todayIdx(); const from = liveHere || (S.days[i] && S.days[i].stops.find((x) => !x.visited && hasGeo(x)));
+  if (!from) { toast('צריך מיקום כדי לחפש לידך'); return; }
+  const mins = (d) => Math.max(1, Math.round(d * 1.3 / 4.8 * 60));
+  const gems = allGems().filter((g) => S.gems[g.id] !== 'no' && !inRoute({ ...g })).map((g) => ({ g, d: km(from, g) })).filter((o) => o.d < 1.3).sort((a, b) => a.d - b.d).slice(0, 8);
+  const food = VEG_FOOD().map((f) => ({ f, d: km(from, f) })).filter((o) => o.d < 1.6).sort((a, b) => a.d - b.d).slice(0, 4);
+  const row = (r, title, sub, c) => `<div class="li"><span class="tile" style="--c:${c}">${ic(r.kind)}</span><a class="grow li-main" href="#place/r/${r.id}" data-act="closeThen" data-href="#place/r/${r.id}"><div class="li-t">${esc(title)}</div><div class="li-m">${esc(sub)}</div></a><button class="add" data-act="liveAddNow" data-r="${r.id}" aria-label="להוסיף עכשיו">${ic('plus')}</button></div>`;
+  sheet(`<h3>מה יש לידי</h3><span class="muted">${liveHere ? 'לפי המיקום שלך עכשיו' : 'לפי המקום הבא במסלול'} · + מכניס למסלול כמקום הבא</span>
+    ${food.length ? `<h2>אוכל טבעוני וללא גלוטן</h2>${recList(food.map(({ f, d }) => { const k = T.discover.food.findIndex((x) => x.name === f.name); const r = reg({ id: 'cfood' + k, ...T.discover.food[k], what: '', verified: true }); const o = openState(r); return row(r, f.name, `${mins(d)} דק׳ ברגל${o === true ? ' · פתוח עכשיו' : o === false ? ' · סגור עכשיו' : ''}`, '#1E9E8F'); }))}` : ''}
+    ${gems.length ? `<h2>💎 פנינים</h2>${recList(gems.map(({ g, d }) => row(gemRec(g), g.he || g.name, `${mins(d)} דק׳ ברגל${g.score ? ` · ${g.score.toFixed(1)}` : ''}`, '#2453C9')))}` : ''}
+    ${!food.length && !gems.length ? '<div class="card muted">לא מצאתי משהו מהרשימות שלנו במרחק הליכה קצר. נסה את החיפוש.</div>' : ''}
+    <a class="btn soft sm" href="#search" data-act="closeThen" data-href="#search">${ic('search')}חיפוש</a>`);
+}
+// Insert a place into today's route right before the next unvisited stop
+function insertBeforeNext(r) {
+  const i = todayIdx() >= 0 ? todayIdx() : curIdx(); const a = S.days[i].stops; const ni = a.findIndex((s) => !s.visited); const ns = recStop(r);
+  if (r.gem) S.gems[r.gem] = 'yes';
+  a.splice(ni < 0 ? a.length : ni, 0, ns); save(); closeSheet(); render(); enrichStop(ns, true);
+  toast(`${cut(ns.name, 22)} נכנס למסלול כמקום הבא`, () => { S.days[i].stops = S.days[i].stops.filter((o) => o.id !== ns.id); save(); render(); });
+}
+function moment() {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.capture = 'environment';
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; if (!f) return; const i = todayIdx() >= 0 ? todayIdx() : curIdx();
+    const near = liveHere ? S.days[i].stops.filter(hasGeo).map((s) => ({ s, d: km(liveHere, s) })).sort((a, b) => a.d - b.d)[0] : null;
+    const st = near && near.d < 0.25 ? near.s : null;
+    let photos = []; try { photos = await storeFiles([f], 1600); } catch (e) { toast('לא הצלחתי לשמור את התמונה'); return; }
+    S.journal.push({ id: uid(), di: i, stopId: st ? st.id : null, text: '', photos, at: Date.now(), lat: liveHere && liveHere.lat, lng: liveHere && liveHere.lng });
+    if (st && !st.visited) st.visited = Date.now(); save(); render(); haptic(15);
+    toast(st ? `נשמר ביומן · ${cut(st.name, 24)}` : 'נשמר ביומן');
+  };
+  inp.click();
+}
 /* drag to reorder the day (the ⋮⋮ handle on each card) */
 function bindTimelineDrag() {
   const tl = $('.tline'); if (!tl) return; const di = curIdx();
@@ -1541,6 +1665,7 @@ function render() {
   if (name === 'journal') mountJournal();
   if (name === 'discover') bindGemSwipe();
   if (name === 'today' || h === '') bindTimelineDrag();
+  if (todayIdx() >= 0) startLive();
   hydrateFiles();
   const ind = $('.dind'); if (ind) requestAnimationFrame(() => requestAnimationFrame(() => { ind.style.setProperty('--x', String(curIdx())); ind.style.setProperty('--c', META[curIdx()].color); }));
   lastDay = null;
@@ -1700,6 +1825,16 @@ const A = {
       <a class="btn soft sm" href="#events" data-act="closeThen" data-href="#events">${ic('party')}כל החגים והאירועים בברצלונה ›</a>`);
   },
   closeThen: (e) => { closeSheet(); location.hash = e.dataset.href; },
+  liveVisited: (e) => { const st = S.days[+e.dataset.d].stops.find((x) => x.id === e.dataset.id); if (!st) return; st.visited = Date.now(); save(); closeSheet(); render(); haptic(12); toast(`✓ ${cut(st.name, 24)}`, () => { delete st.visited; save(); render(); }); if (e.dataset.cam) setTimeout(moment, 250); },
+  liveNear: () => liveNearSheet(),
+  livePassed: (e) => { const i = todayIdx(); if (i < 0) return; const ids = e.dataset.ids.split(','); const now = Date.now(); S.days[i].stops.forEach((s) => { if (ids.includes(s.id)) s.visited = now; }); save(); render(); toast(`סומנו ${ids.length} מקומות שביקרת בהם`, () => { S.days[i].stops.forEach((s) => { if (ids.includes(s.id) && s.visited === now) delete s.visited; }); save(); render(); }); },
+  liveX: (e) => { liveDismiss.add(e.dataset.k); render(); },
+  liveAddNow: (e) => { const r = REC[e.dataset.r]; if (r) insertBeforeNext(r); },
+  liveSwap: (e) => { const r = REC[e.dataset.r]; const i = todayIdx(); if (!r || i < 0) return; const a = S.days[i].stops; const k = a.findIndex((s) => s.id === e.dataset.swap); if (k < 0) return; const old = a[k]; const ns = recStop(r); if (r.gem) S.gems[r.gem] = 'yes'; a.splice(k, 1, ns); const sv = { id: uid(), title: old.name, name: old.name, url: gmSearch(old), fav: true, lat: old.lat ?? null, lng: old.lng ?? null, kind: old.kind, status: 'found', stopId: old.id, story: old.story, wiki: old.wiki, details: old.details }; S.saved.unshift(sv); save(); render(); enrichStop(ns, true); toast(`הוחלף · ${cut(old.name, 18)} נשמר בשמורים`, () => { a.splice(a.indexOf(ns), 1, old); S.saved = S.saved.filter((o) => o.id !== sv.id); save(); render(); }); },
+  liveSkip: (e) => { const i = todayIdx(); if (i >= 0) unplanStop(i, e.dataset.id); render(); },
+  liveTomorrow: (e) => { const i = todayIdx(); if (i < 0 || i >= 4) return; const a = S.days[i].stops; const k = a.findIndex((s) => s.id === e.dataset.id); if (k < 0) return; const [st] = a.splice(k, 1); S.days[i + 1].stops.push(st); save(); render(); toast(`${cut(st.name, 20)} עבר ל${META[i + 1].short}`, () => { S.days[i + 1].stops = S.days[i + 1].stops.filter((o) => o.id !== st.id); a.splice(k, 0, st); save(); render(); }); },
+  liveShorten: (e) => { const i = todayIdx(); const st = i >= 0 && S.days[i].stops.find((x) => x.id === e.dataset.id); if (!st) return; const old = st.dur; st.dur = Math.max(20, durOf(st) - +e.dataset.m); save(); render(); toast(`${cut(st.name, 20)}: ${st.dur} דק׳`, () => { if (old == null) delete st.dur; else st.dur = old; save(); render(); }); },
+  moment: () => moment(),
   alertsT: () => { alertsOpen = !alertsOpen; render(); },
   gemsOnMap: (e) => { closeSheet(); mapDay = +e.dataset.d; mapLayers.add('gems'); warmGems(); mapSel = null; location.hash = '#map'; },
   gemCat: (e) => { gemCat = e.dataset.t; withTransition('tab', render); },
