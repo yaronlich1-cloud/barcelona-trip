@@ -618,3 +618,21 @@ body:has(.mcard.on) .map-loc { display: none; }
 .thotel b { color: var(--ink); font-weight: 700; }
 .mk.hotel { width: 26px; height: 26px; border-radius: 50%; background: #8A93A8; border-width: 2px; }
 .mk.hotel svg { width: 14px; height: 14px; }
+/* v28: drag to reorder, search */
+.tgrip { flex: none; width: 26px; align-self: stretch; display: flex; align-items: center; justify-content: center; color: #B4BACA; cursor: grab; touch-action: none; margin-inline-start: -4px; }
+.tgrip svg { width: 18px; height: 18px; }
+.tstop.dragging { z-index: 20; transition: none !important; }
+.tstop.dragging .tc { box-shadow: 0 12px 30px rgba(19,33,61,.22); transform: scale(1.02); }
+.tline.sorting .tleg { opacity: .35; }
+.tstop.drop-up .tc { box-shadow: 0 -3px 0 var(--day), 0 1px 6px rgba(19,33,61,.06); }
+.tstop.drop-down .tc { box-shadow: 0 3px 0 var(--day), 0 1px 6px rgba(19,33,61,.06); }
+.head { position: relative; }
+.srch-btn { position: absolute; top: 4px; left: 0; display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 12px; background: #fff; border: 1px solid var(--line); font-size: 12px; font-weight: 700; color: var(--muted); text-decoration: none; }
+.srch-btn svg { width: 16px; height: 16px; }
+.srch-field { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 11px 12px; color: var(--muted); text-decoration: none; font-size: 14px; }
+.srch-field svg, .srch-in svg { width: 18px; height: 18px; flex: none; }
+.srch-in { display: flex; align-items: center; gap: 8px; background: #fff; border: 1.5px solid var(--day); border-radius: 14px; padding: 4px 12px; color: var(--muted); }
+.srch-in input { flex: 1; border: 0; outline: 0; font: inherit; font-size: 16px; padding: 8px 0; background: transparent; color: var(--ink); }
+.mt-row { grid-template-columns: 1.3fr auto 1fr; }
+.mt-s { justify-content: center; padding: 7px 9px; }
+a.li { text-decoration: none; color: inherit; }
