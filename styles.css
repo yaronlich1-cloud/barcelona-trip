@@ -664,3 +664,20 @@ a.chip { text-decoration: none; }
 .lv-sug b { font-size: 14px; }
 .lv-sug .muted { font-size: 13px; margin: 2px 0 6px; }
 .fab.cam { bottom: calc(146px + env(safe-area-inset-bottom)); background: #fff; color: var(--ink); box-shadow: 0 6px 16px rgba(19,33,61,.16); }
+/* v32: lighter screens */
+.fold { background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(30,30,40,.04), 0 4px 14px rgba(30,30,40,.05); }
+.fold > summary { list-style: none; cursor: pointer; padding: 13px 14px; font-weight: 800; font-size: 15px; display: flex; align-items: center; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: '▾'; margin-inline-start: auto; color: var(--muted); font-size: 12px; transition: transform .2s; }
+.fold[open] > summary::after { transform: rotate(180deg); }
+.fold-b { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fold-b > .card { box-shadow: none; padding: 0; background: transparent; }
+.dayhero.compact, .dayhero.compact.has-photo { height: 92px; }
+.dayhero.compact .dh-photo { display: none; }
+.head.compact h1 { font-size: 30px; }
+.head.compact { padding-top: 0; }
+.card.pre { display: flex; flex-direction: column; gap: 6px; border: 1.5px solid color-mix(in srgb, var(--day) 30%, #fff); }
+.pre-i { display: flex; align-items: center; gap: 10px; padding: 6px 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: none; text-align: right; cursor: pointer; width: 100%; }
+.pre-i b { display: block; font-size: 14px; }
+.pre-i .muted { font-size: 12px; }
+.pre-i .chev { color: var(--muted); font-size: 20px; }

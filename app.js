@@ -90,7 +90,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '31 · 13.11';
+const VERSION = '32 · 13.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -233,7 +233,7 @@ let weather = null, rate = null, climate = null;
 // Real forecast: opens 16 days before the trip. Until then: the average of the last 10 years for the same dates.
 async function loadWeather() {
   try {
-    const cached = JSON.parse(sessionStorage.getItem('bcn.w2') || 'null');
+    const c0 = JSON.parse(localStorage.getItem('bcn.w3') || 'null'); const cached = c0 && Date.now() - c0.at < 3 * 3600e3 ? c0.w : null;
     if (cached) { weather = cached; } else {
       const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=41.39&longitude=2.17&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,wind_speed_10m_max,sunrise,sunset&hourly=temperature_2m,precipitation_probability,weather_code&timezone=Europe%2FMadrid&start_date=2026-12-13&end_date=2026-12-17');
       if (r.ok) {
@@ -242,7 +242,7 @@ async function loadWeather() {
           weather = {}; const D = j.daily; const tm = (x) => (x || '').slice(11, 16);
           D.time.forEach((d, i) => { weather[d] = { max: Math.round(D.temperature_2m_max[i]), min: Math.round(D.temperature_2m_min[i]), rain: D.precipitation_probability_max[i], code: D.weather_code[i], wind: Math.round(D.wind_speed_10m_max[i]), sunrise: tm(D.sunrise[i]), sunset: tm(D.sunset[i]), hours: [] }; });
           (j.hourly && j.hourly.time || []).forEach((t, i) => { const w = weather[t.slice(0, 10)]; const h = +t.slice(11, 13); if (w && h >= 8 && h <= 22 && h % 2 === 0) w.hours.push({ h, t: Math.round(j.hourly.temperature_2m[i]), p: j.hourly.precipitation_probability[i], c: j.hourly.weather_code[i] }); });
-          sessionStorage.setItem('bcn.w2', JSON.stringify(weather)); render();
+          try { localStorage.setItem('bcn.w3', JSON.stringify({ at: Date.now(), w: weather })); } catch (e) { /* full */ } render();
         }
       }
     }
@@ -347,7 +347,7 @@ function hero(opts = {}) {
   const small = opts.small;
   if (opts.bare) return `<svg class="tiles" viewBox="0 0 390 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g stroke="#F6F8FC" stroke-width="3" stroke-linejoin="round">${heroTiles(false)}</g></svg>`;
   const tiles = heroTiles(small);
-  if (opts.day) return `<div class="dayhero ${opts.img ? 'has-photo' : ''}"><div class="dh-mos"></div>${opts.img ? `<div class="dh-photo"><img class="hero-img" src="${esc(opts.img)}" alt=""></div>` : ''}${opts.chips || ''}</div>`;
+  if (opts.day) return `<div class="dayhero ${opts.img ? 'has-photo' : ''} ${opts.compact ? 'compact' : ''}"><div class="dh-mos"></div>${opts.img ? `<div class="dh-photo"><img class="hero-img" src="${esc(opts.img)}" alt=""></div>` : ''}${opts.chips || ''}</div>`;
   const h = small ? 104 : 200;
   return heroWrap(small, h, tiles, opts);
 }
@@ -498,6 +498,16 @@ function veganSwap(s) { return hasGeo(s) ? nearest(VEG_FOOD(), s, 1)[0] || null 
 const V = {};
 
 let alertsOpen = false;
+// One card with what is still missing before the flight; each line goes away when done
+function preflight() {
+  const items = [];
+  if (!hotelPt()) items.push(['hotel', 'מיקום המלון', 'כדי שכל יום יתחיל וייגמר בו', 'data-act="hotelEdit"']);
+  if (!S.flights.back.time) items.push(['plane', 'שעת טיסת החזור', 'לחישוב מתי לצאת לשדה', 'href="#flights"']);
+  const nb = allStops().filter((o) => needsBooking(o.st)).length; if (nb) items.push(['ticket', `${nb} כרטיסים להזמין`, 'מקומות עם כניסה בשעה קבועה', 'href="#tickets"']);
+  const all = S.packing.flatMap((g) => g.items); const left = all.filter((x) => !x.done).length; if (all.length && left && daysToFlight() <= 7) items.push(['bag', `ציוד: נשארו ${left}`, `מתוך ${all.length} פריטים`, 'href="#packing"']);
+  if (!items.length) return '';
+  return `<div class="card pre"><div class="row"><b class="grow">לפני הטיסה</b><span class="muted">${items.length} דברים</span></div>${items.map(([k, t, sub, at]) => `<${at.startsWith('href') ? 'a' : 'button'} class="pre-i" ${at}><span class="tile" style="--c:var(--day)">${ic(k)}</span><span class="grow"><b>${t}</b><span class="muted">${sub}</span></span><span class="chev">›</span></${at.startsWith('href') ? 'a' : 'button'}>`).join('')}</div>`;
+}
 V.today = () => {
   const i = curIdx(); const m = META[i]; const day = S.days[i]; setDayColor(i);
   const dtf = daysToFlight();
@@ -514,6 +524,7 @@ V.today = () => {
   const needB = day.stops.filter(needsBooking);
   if (needB.length) alerts.push(`<a class="alert" href="#tickets">${ic('ticket')}<span class="grow">להזמין מראש: ${needB.map((x) => esc(x.name)).join(', ')}</span><span class="mini">לכרטיסים</span></a>`);
   const idea = ideasData(i);
+  const preCard = todayIdx() < 0 && daysToFlight() > 0 ? preflight() : '';
   const ideasBar = idea.recs.length || idea.evs.length || idea.gems.length ? `<button class="ideas" data-act="ideas" data-d="${i}"><span class="tile" style="--c:#2453C9">${ic('star')}</span><span class="grow"><b>רעיונות להיום</b><span class="muted">${[idea.gems.length ? `💎 ${idea.gems.length} פנינים` : '', idea.evs.length ? `${idea.evs.length} אירועים` : '', idea.recs.length ? `${idea.recs.length} המלצות לפי השעה` : ''].filter(Boolean).join(' · ')}</span></span><span class="chev">›</span></button>` : '';
   const L = liveState(i); const plan = L ? L.plan : schedule(i);
   let list = '';
@@ -535,13 +546,14 @@ V.today = () => {
   const hName = esc((S.hotel && S.hotel.name) || 'המלון'); const mWord = (o) => (o.mode === 'walk' ? `${o.min} דק׳ ברגל` : `כ־${o.min} דק׳ בתחבורה`);
   const hStart = `<div class="thotel">${ic('hotel')}<span>${i === 0 ? 'צ׳ק־אין ב' : 'יוצאים מ'}${hName}${plan.out ? ` · ${mWord(plan.out)} לתחנה הראשונה` : ''}</span>${!H ? '<button class="lnk" data-act="hotelEdit">הוסף כתובת מלון</button>' : ''}</div>`;
   const hEnd = day.stops.length ? `<div class="thotel">${ic('hotel')}<span>${i === 4 ? `חוזרים ל${hName} לאסוף מזוודות${S.flights.back.time ? ` · לצאת לשדה עד <b dir="ltr">${leaveBy()}</b>` : ' ומשם לשדה'}` : `חזרה ל${hName}`}${plan.back ? ` · ${mWord(plan.back)}, בערך <b dir="ltr">${fmtT(plan.back.arrive)}</b>` : ''}</span></div>` : '';
-  return hero({ chips, img: dayPhoto(i), day: true }) + `
-  <div class="head"><span class="eyebrow">יום ${i + 1} מתוך 5 · ${m.short} ${m.num}.12</span><h1>${esc(m.title)}</h1><a class="srch-btn" href="#search" aria-label="חיפוש מקום">${ic('search')}<span>חיפוש</span></a></div>
+  return hero({ chips, img: dayPhoto(i), day: true, compact: !!L }) + `
+  <div class="head ${L ? 'compact' : ''}"><span class="eyebrow">יום ${i + 1} מתוך 5 · ${m.short} ${m.num}.12</span><h1>${esc(m.title)}</h1><a class="srch-btn" href="#search" aria-label="חיפוש מקום">${ic('search')}<span>חיפוש</span></a></div>
   <div class="days" role="tablist" aria-label="ימי הטיול"><span class="dind" style="--x:${lastDay ?? i};--c:${m.color}"></span>${META.map((d, k) => `<button class="dayb ${k === i ? 'on' : ''}" style="--c:${d.color}" role="tab" aria-selected="${k === i}" data-act="day" data-i="${k}"><b>${d.num}</b><span>${d.short}</span>${weather && weather[d.date] ? `<i>${weather[d.date].max}°</i>` : ''}</button>`).join('')}</div>
   ${installEvt && !standalone() ? `<div class="section"><button class="btn navy sm" data-act="install">${ic('plus')}התקן את האפליקציה בטלפון</button></div>` : ''}
   ${L ? liveCard(i, L) : ''}
   <div class="section">
     ${alerts.length > 1 ? `<button class="alert sum" data-act="alertsT">${ic('warn')}<span class="grow"><b>${alerts.length} דברים לבדוק היום</b></span><span class="chev">${alertsOpen ? '▴' : '▾'}</span></button>${alertsOpen ? `<div class="alerts-open">${alerts.join('')}</div>` : ''}` : alerts.join('')}
+    ${preCard}
     ${ideasBar}
     <div class="row" style="margin-top:6px"><h2 class="grow">המסלול</h2><button class="chipbtn" data-act="sortDay">${ic('sort')}סדר</button><button class="chipbtn" data-act="dayNav" data-d="${i}">${ic('pin')}כל היום בגוגל</button></div>
     <div class="timebar"><label for="day-start">יוצאים ב־</label><input type="time" id="day-start" value="${fmtT(toMin(S.dayStart[i]) ?? 570)}" data-d="${i}">${plan.length ? `<span class="grow">${plan.back ? 'במלון בערך' : 'סיום משוער'} <b>${fmtT(plan.back ? plan.back.arrive : plan[plan.length - 1].leave)}</b></span>` : ''}</div>
@@ -1034,20 +1046,20 @@ function bindTimelineDrag() {
   }));
 }
 /* search: one box for everything */
-let srchQ = '', srchNet = { q: '', items: [], loading: false, err: false }, srchTimer = null;
+let srchDay = null, srchQ = '', srchNet = { q: '', items: [], loading: false, err: false }, srchTimer = null;
 const matchQ = (q, ...f) => { const n = normName(q); return n.length >= 2 && f.some((x) => x && normName(x).includes(n)); };
 function srchLocal(q) {
   const G = [];
   const route = allStops().filter((o) => matchQ(q, o.st.name, o.st.note)).map((o) => `<a class="li" href="#place/${o.di}/${o.st.id}"><span class="tile" style="--c:${META[o.di].color}">${ic(o.st.kind)}</span><div class="grow"><div class="li-t">${esc(o.st.name)}</div><div class="li-m">כבר במסלול · יום ${META[o.di].short} ${META[o.di].num}.12</div></div><span class="li-done">✓ ${META[o.di].short}</span></a>`);
   if (route.length) G.push(['כבר במסלול', route]);
-  const sv = S.saved.filter((x) => matchQ(q, x.name, x.title, x.caption)).map((x) => `<a class="li" href="#place/s/${x.id}"><span class="tile" style="--c:#D99400">${ic(x.kind || 'star')}</span><div class="grow"><div class="li-t">${esc(x.name || x.title)}</div><div class="li-m">בשמורים${x.fav ? ' · ★' : ''}</div></div><span class="chev">‹</span></a>`);
+  const sv = S.saved.filter((x) => matchQ(q, x.name, x.title, x.caption)).map((x) => `<div class="li"><span class="tile" style="--c:#D99400">${ic(x.kind || 'star')}</span><a class="grow li-main" href="#place/s/${x.id}"><div class="li-t">${esc(x.name || x.title)}</div><div class="li-m">בשמורים${x.fav ? ' · ★' : ''}</div></a>${srchDay != null ? `<button class="add" data-act="srchAddSaved" data-id="${x.id}" aria-label="להוסיף ליום">${ic('plus')}</button>` : '<span class="chev">‹</span>'}</div>`);
   if (sv.length) G.push(['בשמורים', sv]);
-  const gm = allGems().filter((g) => matchQ(q, g.name, g.he, g.area, g.bg)).map((g) => gemRow(g));
+  const gm = allGems().filter((g) => matchQ(q, g.name, g.he, g.area, g.bg)).map((g) => gemRow(g, srchDay ?? undefined));
   if (gm.length) G.push(['💎 פנינים', gm]);
   const cur = [...T.discover.food.map((d, k) => ['cfood' + k, d]).filter(([, d]) => isVeganGF(d)), ...T.discover.bars.map((d, k) => ['cbars' + k, d]), ...T.discover.tops.map((d, k) => ['ctops' + k, d])]
-    .filter(([, d]) => matchQ(q, d.name, d.note, d.area)).map(([id, d]) => recRow({ r: reg({ id, ...d, what: '', verified: d.kind === 'food' }), d: 0, o: null }, 0, { why: d.note }));
+    .filter(([, d]) => matchQ(q, d.name, d.note, d.area)).map(([id, d]) => recRow({ r: reg({ id, ...d, what: '', verified: d.kind === 'food' }), d: 0, o: null }, 0, { why: d.note, day: srchDay ?? undefined }));
   if (cur.length) G.push(['המומלצים שלנו', cur]);
-  const ev = T.events.filter((e) => matchQ(q, e.name, e.he)).map((e) => recRow({ r: evRec(e), d: 0, o: null }, 0, { why: `${e.he} · ${e.hours}`, color: '#D99400' }));
+  const ev = T.events.filter((e) => matchQ(q, e.name, e.he)).map((e) => recRow({ r: evRec(e), d: 0, o: null }, 0, { why: `${e.he} · ${e.hours}`, color: '#D99400', day: srchDay ?? undefined }));
   if (ev.length) G.push(['אירועים', ev]);
   return G;
 }
@@ -1059,16 +1071,17 @@ function srchNetHTML(q, local) {
   const all = srchNet.items.filter((r) => !known.some((k) => sameSpot({ ...k, name: k.name || k.title }, r)));
   const food = all.filter((r) => r.kind === 'food' && !isVeganGF(r)); const rest = all.filter((r) => !food.includes(r));
   const wiki = (srchNet.wiki || []).filter((w) => !(w.lat != null && [...known, ...rest].some((k) => sameSpot({ ...k, name: k.name || k.title }, { ...w, name: w.title }))));
-  const wRows = wiki.map((w) => { if (w.lat != null && inCity(w)) { const r = reg({ id: 'w' + w.lang + normName(w.title).replace(/\s+/g, '').slice(0, 24), name: w.title, lat: w.lat, lng: w.lng, kind: 'museum', what: '', note: w.desc, thumb: w.thumb, wikiFixed: { lang: w.lang, title: w.title } }); return recRow({ r, d: 0, o: null }, 0, { why: w.desc || 'ויקיפדיה' }); }
+  const wRows = wiki.map((w) => { if (w.lat != null && inCity(w)) { const r = reg({ id: 'w' + w.lang + normName(w.title).replace(/\s+/g, '').slice(0, 24), name: w.title, lat: w.lat, lng: w.lng, kind: 'museum', what: '', note: w.desc, thumb: w.thumb, wikiFixed: { lang: w.lang, title: w.title } }); return recRow({ r, d: 0, o: null }, 0, { why: w.desc || 'ויקיפדיה', day: srchDay ?? undefined }); }
     return `<a class="li" href="https://${w.lang}.wikipedia.org/wiki/${encodeURIComponent(w.title.replace(/ /g, '_'))}" target="_blank" rel="noopener">${w.thumb ? `<img class="thumb" src="${esc(w.thumb)}" alt="" loading="lazy">` : `<span class="tile" style="--c:#5E6780">${ic('book')}</span>`}<div class="grow"><div class="li-t">${esc(w.title)}</div><div class="li-m">${esc(w.desc || 'ערך בוויקיפדיה')} · ויקיפדיה ↗</div></div></a>`; });
-  return `${wRows.length ? `<h2>מוויקיפדיה</h2>${recList(wRows)}` : ''}<h2>מקומות ברשת</h2>${rest.length ? recList(rest.map((r) => recRow({ r, d: 0, o: null }, 0, { why: r.note || 'ברצלונה' }))) : '<div class="card muted">לא מצאתי ברשת מקום נוסף בשם הזה.</div>'}${food.length ? `<span class="muted" style="font-size:12px">הסתרתי ${food.length} מסעדות שלא ידוע שהן טבעוניות עם אפשרויות ללא גלוטן.</span>` : ''}`;
+  return `${wRows.length ? `<h2>מוויקיפדיה</h2>${recList(wRows)}` : ''}<h2>מקומות ברשת</h2>${rest.length ? recList(rest.map((r) => recRow({ r, d: 0, o: null }, 0, { why: r.note || 'ברצלונה', day: srchDay ?? undefined }))) : '<div class="card muted">לא מצאתי ברשת מקום נוסף בשם הזה.</div>'}${food.length ? `<span class="muted" style="font-size:12px">הסתרתי ${food.length} מסעדות שלא ידוע שהן טבעוניות עם אפשרויות ללא גלוטן.</span>` : ''}`;
 }
 function srchBody() {
   const q = srchQ.trim();
-  if (normName(q).length < 2) return '<div class="card muted">כתוב שם של מקום, אפילו חלק ממנו. אחפש במסלול, בשמורים, בפנינים, בהמלצות, באירועים וגם ברשת.</div>';
+  const manual = `<button class="lnk muted" data-act="placeManual" style="align-self:flex-start">לא מוצא? להוסיף ידנית, עם שם וכתובת</button>`;
+  if (normName(q).length < 2) return `<div class="card muted">כתוב שם של מקום, אפילו חלק ממנו. אחפש במסלול, בשמורים, בפנינים, באוכל הטבעוני, באירועים, בוויקיפדיה ובמפות.${srchDay != null ? ' לחיצה על + מוסיפה אותו ליום.' : ''}</div>${manual}`;
   const G = srchLocal(q);
   const gBar = `<div class="gbar"><a class="chipbtn" href="${gUrl(q)}" target="_blank" rel="noopener">${ic('search')}לחפש בגוגל</a><a class="chipbtn" href="${gMapsUrl(q)}" target="_blank" rel="noopener">${ic('pin')}בגוגל מפות</a></div>`;
-  return gBar + (G.length ? G.map(([t, rows]) => `<h2>${t} <span class="muted">${rows.length}</span></h2>${recList(rows.slice(0, 12))}`).join('') : '<div class="card muted">אין התאמה בתוך האפליקציה.</div>') + srchNetHTML(q, G);
+  return gBar + (G.length ? G.map(([t, rows]) => `<h2>${t} <span class="muted">${rows.length}</span></h2>${recList(rows.slice(0, 12))}`).join('') : '<div class="card muted">אין התאמה בתוך האפליקציה.</div>') + srchNetHTML(q, G) + `<button class="lnk muted" data-act="placeManual" style="align-self:flex-start">לא מוצא? להוסיף ידנית, עם שם וכתובת</button>`;
 }
 function srchRun() {
   const q = srchQ.trim(); const box = $('#srch-res'); if (box) box.innerHTML = srchBody();
@@ -1097,7 +1110,8 @@ async function srchWiki(q) {
 }
 const gUrl = (q) => `https://www.google.com/search?q=${encodeURIComponent(q + ' ברצלונה')}`;
 const gMapsUrl = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q + ', Barcelona')}`;
-V.search = () => { setTimeout(() => { const i = $('#srch'); if (i && !srchQ) i.focus(); }, 60); return pageHead('חיפוש', 'באפליקציה, בוויקיפדיה, במפות ובגוגל', '#today') + `<div class="section">
+V.search = () => { setTimeout(() => { const i = $('#srch'); if (i && !srchQ) i.focus(); }, 60); return pageHead(srchDay != null ? 'הוספת מקום' : 'חיפוש', 'באפליקציה, בוויקיפדיה, במפות ובגוגל', '#today') + `<div class="section">
+  ${srchDay != null ? `<div class="herebar" style="--c:${META[srchDay].color}">${ic('plus')}<span class="grow">מוסיף ליום ${META[srchDay].short} ${META[srchDay].num}.12</span><button class="chipbtn" data-act="srchDone">סיום</button><button class="icon-btn" data-act="srchDayOff" aria-label="רק לחפש">${ic('x')}</button></div>` : ''}
   <label class="srch-in">${ic('search')}<input id="srch" type="search" enterkeyhint="search" autocomplete="off" placeholder="למשל: Sant Pau, בונקרים, Pötstot" value="${esc(srchQ)}"></label>
   <div id="srch-res" style="display:flex;flex-direction:column;gap:10px">${srchBody()}</div></div>`; };
 
@@ -1268,9 +1282,9 @@ V.place = (di, id) => {
     ${src && src.url ? `<a class="btn soft sm" href="${esc(src.url)}" target="_blank" rel="noopener">${ic(srcKind(src.url))}הפוסט המקורי (${SRC[srcKind(src.url)][0]})</a>` : ''}
     ${src && src.caption ? `<div class="card muted" style="white-space:pre-line;font-size:13px">${esc(cut(src.caption, 300))}</div>` : ''}
     ${gemBlock(s)}
-    ${infoCard(s)}
-    ${storyHTML(s, w)}
-    ${hasGeo(s) && s.kind !== 'food' ? `<h2>טבעוני וללא גלוטן קרוב</h2>${nearest(VEG_FOOD(), s, 3).map((f) => `<div class="card row"><span class="tile" style="--c:var(--teal)">${ic('food')}</span><div class="grow"><div style="font-weight:800">${esc(f.name)}</div><div class="muted">${fmtKm(f.dist)} · ${esc(f.note)}</div></div><a class="icon-btn" href="${gmDir(s, f, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('pin')}</a></div>`).join('')}` : ''}
+    ${fold('פרטים ושעות', infoCard(s))}
+    ${fold('הסיפור', storyHTML(s, w))}
+    ${hasGeo(s) && s.kind !== 'food' ? fold('טבעוני וללא גלוטן קרוב', `${nearest(VEG_FOOD(), s, 3).map((f) => `<div class="card row"><span class="tile" style="--c:var(--teal)">${ic('food')}</span><div class="grow"><div style="font-weight:800">${esc(f.name)}</div><div class="muted">${fmtKm(f.dist)} · ${esc(f.note)}</div></div><a class="icon-btn" href="${gmDir(s, f, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('pin')}</a></div>`).join('')}`) : ''}
     <div class="row"><a class="btn soft sm grow" href="${gmSearch(s)}" target="_blank" rel="noopener">תמונות וביקורות ב־Google Maps</a>${fromSaved ? `<button class="btn soft sm" data-act="savedIdentify" data-id="${s.id}">${ic('pen')}מקום אחר</button>` : `<button class="btn soft sm" data-act="placeEditById" data-d="${di}" data-id="${s.id}">${ic('pen')}עריכה</button>`}</div>
     ${!fromSaved ? `<button class="btn soft sm" data-act="unplan" data-d="${di}" data-id="${s.id}">${ic('star')}להוציא מהיום, ולשמור בשמורים</button>` : ''}
   </div>`;
@@ -1290,9 +1304,9 @@ function recPage(id) {
     ${o != null ? `<div>${openBadge(o)}</div>` : ''}
     ${imgs.length > 1 ? `<div class="gallery">${imgs.slice(1).map((u, k) => `<img src="${esc(u)}" alt="תמונה ${k + 2} של ${esc(r.name)}" loading="lazy" data-act="lightbox" data-i="${k + 1}">`).join('')}</div>` : (enriching.has(r.id) && !imgs.length ? '<div class="gallery">' + '<span class="sk sk-ph"></span>'.repeat(3) + '</div>' : '')}
     ${gemBlock(r)}
-    ${infoCard(r)}
-    ${storyHTML(r, w)}
-    ${r.kind !== 'food' ? `<h2>טבעוני וללא גלוטן קרוב</h2>${nearest(VEG_FOOD(), r, 3).map((f) => `<div class="card row"><span class="tile" style="--c:var(--teal)">${ic('food')}</span><div class="grow"><div style="font-weight:800">${esc(f.name)}</div><div class="muted">${fmtKm(f.dist)} · ${esc(f.note)}</div></div><a class="icon-btn" href="${gmDir(r, f, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('pin')}</a></div>`).join('')}` : ''}
+    ${fold('פרטים ושעות', infoCard(r))}
+    ${fold('הסיפור', storyHTML(r, w))}
+    ${r.kind !== 'food' ? fold('טבעוני וללא גלוטן קרוב', `${nearest(VEG_FOOD(), r, 3).map((f) => `<div class="card row"><span class="tile" style="--c:var(--teal)">${ic('food')}</span><div class="grow"><div style="font-weight:800">${esc(f.name)}</div><div class="muted">${fmtKm(f.dist)} · ${esc(f.note)}</div></div><a class="icon-btn" href="${gmDir(r, f, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('pin')}</a></div>`).join('')}`) : ''}
     <a class="btn soft sm" href="${gmSearch(r)}" target="_blank" rel="noopener">תמונות וביקורות ב־Google Maps</a>
   </div>`;
 }
@@ -1334,6 +1348,7 @@ function infoCard(s) {
 const CUISINE = { vegan: 'טבעוני', vegetarian: 'צמחוני', pizza: 'פיצה', sushi: 'סושי', japanese: 'יפני', mediterranean: 'ים תיכוני', spanish: 'ספרדי', catalan: 'קטלאני', tapas: 'טאפאס', coffee_shop: 'בית קפה', cafe: 'בית קפה', burger: 'המבורגרים', mexican: 'מקסיקני', italian: 'איטלקי', indian: 'הודי', healthy: 'בריא', bakery: 'מאפייה', brunch: 'בראנץ׳', breakfast: 'ארוחת בוקר', seafood: 'פירות ים', international: 'בינלאומי', asian: 'אסייתי', chinese: 'סיני', thai: 'תאילנדי', juice: 'מיצים', ice_cream: 'גלידה', cocktails: 'קוקטיילים', regional: 'מקומי', salad: 'סלטים', sandwich: 'כריכים', ramen: 'ראמן', middle_eastern: 'מזרח תיכוני', lebanese: 'לבנוני', greek: 'יווני', french: 'צרפתי', wine: 'יין' };
 const cut = (t, n) => (t.length > n ? t.slice(0, n).replace(/\s+\S*$/, '') + '…' : t);
 const paras = (t) => t.split(/\n+/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p)}</p>`).join('');
+const fold = (title, html, open) => (html && html.trim() ? `<details class="fold" ${open ? 'open' : ''}><summary>${title}</summary><div class="fold-b">${html.replace('<h2>פרטים</h2>', '')}</div></details>` : '');
 function storyHTML(s, w) {
   const st = storyFor(s);
   let wikiPart = '';
@@ -1937,7 +1952,11 @@ const A = {
     const l = linkedStop(x); if (l) { location.hash = `#place/${l.di}/${l.st.id}`; return; }
     if (e.dataset.d != null) addSavedToDay(x, +e.dataset.d); else daySheet((di) => addSavedToDay(x, di));
   },
-  placeAdd: (e) => placeSheet(+e.dataset.d, null),
+  placeAdd: (e) => { srchDay = +e.dataset.d; srchQ = ''; closeSheet(); location.hash = '#search'; },
+  placeManual: () => { const d = srchDay != null ? srchDay : curIdx(); placeSheet(d, null); },
+  srchDone: () => { const d = srchDay; srchDay = null; location.hash = '#today'; if (d != null && d !== curIdx()) { S.dayIdx = d; save(); } },
+  srchDayOff: () => { srchDay = null; srchRun(); render(); },
+  srchAddSaved: (e) => { const x = S.saved.find((o) => o.id === e.dataset.id); if (x && srchDay != null) { addSavedToDay(x, srchDay); srchRun(); } },
   placeEdit: (e) => placeSheet(+e.dataset.d, +e.dataset.s),
   placeEditById: (e) => { const di = +e.dataset.d; placeSheet(di, S.days[di].stops.findIndex((s) => s.id === e.dataset.id)); },
   placeDel: (e) => { const di = +e.dataset.d, si = +e.dataset.s; const [x] = S.days[di].stops.splice(si, 1); save(); render(); toast(`"${x.name}" נמחק`, () => { S.days[di].stops.splice(si, 0, x); save(); render(); }); },
