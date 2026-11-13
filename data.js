@@ -4,7 +4,6 @@ window.TRIP = {
   // The hotel is entered inside the app and stays on the device; it is not stored in the code.
   days: [
     { date: '2026-12-13', num: '13', short: 'ראשון', color: '#E8553D', title: 'הרובע הגותי ואל בורן', stops: [
-      { kind: 'hotel', name: 'המלון', note: 'צ׳ק־אין והתמקמות', hotelRef: true },
       { kind: 'food', name: 'Teresa Carles', note: 'צהריים · Jovellanos 2', lat: 41.38508, lng: 2.16801 },
       { kind: 'walk', name: 'הרובע הגותי ו־El Call', story: 'gotic', note: 'הקתדרלה והרובע היהודי', lat: 41.3830, lng: 2.1750, wiki: 'Barri_Gòtic' },
       { kind: 'shop', name: 'אל בורן', story: 'born', note: 'בוטיקים ואווירת חג', lat: 41.3846, lng: 2.1826, wiki: 'El_Born', rule: 'shops' }
@@ -29,8 +28,7 @@ window.TRIP = {
     ]},
     { date: '2026-12-17', num: '17', short: 'חמישי', color: '#C2417F', title: 'שופינג וטיסה הביתה', stops: [
       { kind: 'shop', name: 'Passeig de Gràcia', story: 'gracia', note: 'קניות אחרונות', lat: 41.3936, lng: 2.1634, wiki: 'Passeig_de_Gràcia', rule: 'shops' },
-      { kind: 'food', name: 'Honest Greens', note: 'צהריים · Gran de Gràcia 30', lat: 41.39870, lng: 2.15699 },
-      { kind: 'plane', name: 'מהמלון לשדה', note: 'איסוף מזוודות ויציאה', hotelRef: true, keepName: true }
+      { kind: 'food', name: 'Honest Greens', note: 'צהריים · Gran de Gràcia 30', lat: 41.39870, lng: 2.15699 }
     ]}
   ],
   // Opening-hours rules, checked against several sources on 10.11.2026. Re-check the official sites a week before the trip.

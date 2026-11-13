@@ -611,3 +611,10 @@ body:has(.mcard.on) .map-loc { display: none; }
 .leaflet-bottom.leaflet-left { bottom: calc(80px + env(safe-area-inset-bottom)); }
 .leaflet-control-attribution { margin: 0 0 4px 6px !important; }
 .ms-sel .gem-sc.big { align-self: center !important; flex: none; line-height: 1; }
+/* v26: the hotel as a light start and end of the day */
+.thotel { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); padding: 2px 4px; }
+.thotel svg { width: 15px; height: 15px; flex: none; opacity: .8; }
+.thotel span { flex: 1; }
+.thotel b { color: var(--ink); font-weight: 700; }
+.mk.hotel { width: 26px; height: 26px; border-radius: 50%; background: #8A93A8; border-width: 2px; }
+.mk.hotel svg { width: 14px; height: 14px; }

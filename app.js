@@ -83,12 +83,14 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
   if (!S.wish) S.wish = [];
   if (!S.journal) S.journal = [];
   if (!S.gems) S.gems = {};
+  // The hotel is no longer a stop: every day starts and ends there on its own
+  if (!S.hotelImplicit) { S.days.forEach((d) => { d.stops = d.stops.filter((s) => !s.hotelRef); }); S.hotelImplicit = 1; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* full */ } }
   if (!S.dayStart) S.dayStart = {};
   if (!S.diet) S.diet = { celiac: true, vegan: true, lang: 'es' };
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '25 · 12.11';
+const VERSION = '26 · 13.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -168,10 +170,16 @@ const durOf = (s) => (s.dur != null ? s.dur : s.hotelRef ? 0 : DUR[s.kind] ?? 60
 function rawHours(s) { const r = s.rule && T.rules[s.rule]; if (r && r.raw) return r.raw; return (s.details && s.details.hoursRaw) || ''; }
 const atCity = (date, min) => new Date(`${date}T${fmtT(min)}:00+01:00`);
 // Walk through the day: travel by the chosen mode, wait for fixed entry times, check opening hours at arrival.
+// Every day starts and ends at the hotel (when its location is known)
+const hotelPt = () => (S.hotel && S.hotel.lat != null ? { id: 'hotel', kind: 'hotel', name: S.hotel.name || 'המלון', lat: S.hotel.lat, lng: S.hotel.lng } : null);
+function hotelLeg(a, b) { const L = legInfo(a, b); const mode = L.rec; return { mode, min: (mode === 'walk' ? L.walk : L.transit) || 0 }; }
 function schedule(di) {
-  const day = S.days[di]; const date = META[di].date; let t = toMin(S.dayStart[di]) ?? 570; const out = [];
+  const day = S.days[di]; const date = META[di].date; const start = toMin(S.dayStart[di]) ?? 570; let t = start; const out = [];
+  const H = hotelPt(); const geo = day.stops.filter(hasGeo);
+  out.start = start; out.out = H && geo.length ? hotelLeg(H, day.stops.find(hasGeo)) : null;
   day.stops.forEach((s, si) => {
     let travel = 0;
+    if (si === 0 && out.out && hasGeo(s)) { travel = out.out.min; t += travel; }
     if (si > 0) { const pv = day.stops[si - 1]; const L = legInfo(pv, s); const mode = S.legs[pv.id + '>' + s.id] || L.rec; travel = (mode === 'walk' ? L.walk : L.transit) || 15; t += travel; }
     let arrive = t, wait = 0, late = 0; const fx = toMin(s.time);
     if (fx != null) { if (arrive < fx) { wait = fx - arrive; arrive = fx; } else if (arrive > fx) late = arrive - fx; }
@@ -184,6 +192,7 @@ function schedule(di) {
     out.push({ s, arrive, leave, wait, late, closed, travel });
     t = leave;
   });
+  if (H && geo.length) { const b = hotelLeg(geo[geo.length - 1], H); out.back = { ...b, arrive: t + b.min }; }
   return out;
 }
 function bookingFor(s) { const n = normName(s.name) + ' ' + (s.story || ''); return T.booking.find((b) => b.keys.some((k) => n.includes(normName(k)))); }
@@ -513,7 +522,10 @@ V.today = () => {
     const L = legInfo(s, n); const key = s.id + '>' + n.id; const mode = S.legs[key] || L.rec;
     list += `<div class="tleg"><div class="tn"></div><div class="tlegc"><button class="lg ${mode === 'walk' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="walk">${ic('walk')}${L.walk ? `${L.walk} דק׳` : 'ברגל'}</button><button class="lg ${mode === 'transit' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="transit">${ic('metro')}${L.transit ? `≈${L.transit} דק׳` : 'תחבורה'}</button><a class="lg-go" href="${gmDir(s, n, mode === 'walk' ? 'walking' : 'transit')}" target="_blank" rel="noopener">ניווט ›</a></div></div>`;
   });
-  const dayUrl = 'https://www.google.com/maps/dir/' + day.stops.map((s) => q(s)).join('/');
+  const H = hotelPt(); const dayUrl = 'https://www.google.com/maps/dir/' + (H ? [H, ...day.stops, H] : day.stops).map((s) => q(s)).join('/');
+  const hName = esc((S.hotel && S.hotel.name) || 'המלון'); const mWord = (o) => (o.mode === 'walk' ? `${o.min} דק׳ ברגל` : `כ־${o.min} דק׳ בתחבורה`);
+  const hStart = `<div class="thotel">${ic('hotel')}<span>${i === 0 ? 'צ׳ק־אין ב' : 'יוצאים מ'}${hName}${plan.out ? ` · ${mWord(plan.out)} לתחנה הראשונה` : ''}</span>${!H ? '<button class="lnk" data-act="hotelEdit">הוסף כתובת מלון</button>' : ''}</div>`;
+  const hEnd = day.stops.length ? `<div class="thotel">${ic('hotel')}<span>${i === 4 ? `חוזרים ל${hName} לאסוף מזוודות${S.flights.back.time ? ` · לצאת לשדה עד <b dir="ltr">${leaveBy()}</b>` : ' ומשם לשדה'}` : `חזרה ל${hName}`}${plan.back ? ` · ${mWord(plan.back)}, בערך <b dir="ltr">${fmtT(plan.back.arrive)}</b>` : ''}</span></div>` : '';
   return hero({ chips, img: dayPhoto(i), day: true }) + `
   <div class="head"><span class="eyebrow">יום ${i + 1} מתוך 5 · ${m.short} ${m.num}.12</span><h1>${esc(m.title)}</h1></div>
   <div class="days" role="tablist" aria-label="ימי הטיול"><span class="dind" style="--x:${lastDay ?? i};--c:${m.color}"></span>${META.map((d, k) => `<button class="dayb ${k === i ? 'on' : ''}" style="--c:${d.color}" role="tab" aria-selected="${k === i}" data-act="day" data-i="${k}"><b>${d.num}</b><span>${d.short}</span>${weather && weather[d.date] ? `<i>${weather[d.date].max}°</i>` : ''}</button>`).join('')}</div>
@@ -524,8 +536,10 @@ V.today = () => {
     ${alerts.join('')}
     ${ideasBar}
     <div class="row" style="margin-top:6px"><h2 class="grow">המסלול</h2><button class="chipbtn" data-act="sortDay">${ic('sort')}סדר</button><a class="chipbtn" href="#places">${ic('pen')}עריכה</a><a class="chipbtn" href="${dayUrl}" target="_blank" rel="noopener">${ic('pin')}כל היום</a></div>
-    <div class="timebar"><label for="day-start">יוצאים ב־</label><input type="time" id="day-start" value="${fmtT(toMin(S.dayStart[i]) ?? 570)}" data-d="${i}">${plan.length ? `<span class="grow">סיום משוער <b>${fmtT(plan[plan.length - 1].leave)}</b></span>` : ''}</div>
+    <div class="timebar"><label for="day-start">יוצאים ב־</label><input type="time" id="day-start" value="${fmtT(toMin(S.dayStart[i]) ?? 570)}" data-d="${i}">${plan.length ? `<span class="grow">${plan.back ? 'במלון בערך' : 'סיום משוער'} <b>${fmtT(plan.back ? plan.back.arrive : plan[plan.length - 1].leave)}</b></span>` : ''}</div>
+    ${hStart}
     ${list ? `<div class="tline">${list}</div>` : '<div class="card muted">אין עדיין מקומות ביום הזה. לחץ על "+ מקום".</div>'}
+    ${hEnd}
     <div style="height:64px"></div>
   </div>
   <button class="fab" data-act="placeAdd" data-d="${i}" aria-label="הוסף מקום">${ic('plus')}מקום</button>`;
@@ -617,6 +631,7 @@ function mapTopInner() {
     ${mapLayers.size && mtOpen !== 'lays' ? `<div class="mt-on">${[...mapLayers].map((k) => { const L = MAP_LAYERS.find((l) => l[0] === k); return `<span style="--c:${L[2]}"><i></i>${L[1]}</span>`; }).join('')}</div>` : ''}
     ${mtOpen === 'lays' ? `<div class="mt-panel"><div class="ms-lays">${MAP_LAYERS.map(([k, t, c]) => { const n = mapLayers.has(k) ? layerItems(k) : null; return `<button class="pill ${mapLayers.has(k) ? 'on' : ''}" style="--c:${c}" data-act="mapLayer" data-k="${k}" aria-pressed="${mapLayers.has(k)}">${mapLayers.has(k) ? '✓ ' : ''}${t}${n ? (n.loading && !n.length ? ' · מחפש…' : ` · ${n.length}`) : ''}</button>`; }).join('')}</div><span class="muted" style="font-size:12px">השכבות מוצגות ליד המסלול של היום שבחרת. לחץ על סמן כדי לראות פרטים.</span></div>` : ''}
     ${mtOpen === 'route' ? `<div class="mt-panel"><div class="list">${items.map((x, n) => `<div class="li ${x.id === mapSel ? 'sel' : ''}" data-act="mapPick" data-id="${x.id}"><span class="ms-n" style="--c:${x.color}">${n + 1}</span><span class="tile" style="--c:${x.color}">${ic(x.kind)}</span><div class="grow"><div class="li-t">${esc(x.name)}</div>${x.note ? `<div class="li-m">${esc(cut(x.note, 44))}</div>` : ''}</div></div>`).join('') || '<div class="li muted">אין ביום הזה מקומות עם מיקום.</div>'}</div>
+      <div class="thotel">${ic('hotel')}<span>${hotelPt() ? `היום מתחיל ונגמר ב${esc(S.hotel.name || 'מלון')} (הסמן האפור הקטן)` : 'הוסף כתובת מלון כדי שכל יום יתחיל וייגמר בו'}</span>${hotelPt() ? '' : '<button class="lnk" data-act="hotelEdit">הוספה</button>'}</div>
       <div class="edrow"><button class="chipbtn" data-act="mapSort">${ic('sort')}סדר לי את היום</button><button class="chipbtn" data-act="placeAdd" data-d="${mapDay}">${ic('plus')}הוסף מקום</button><span class="muted grow">או לחיצה ארוכה במפה</span></div></div>` : ''}`;
 }
 function mapCardInner() {
@@ -679,6 +694,13 @@ function drawMarkers(fit) {
     line.push([s.lat, s.lng]);
   });
   if (line.length > 1) L.polyline(line, { color: pts[0].color, weight: 4, dashArray: '2 10', lineCap: 'round' }).addTo(layer);
+  const H = hotelPt();
+  if (H) {
+    L.marker([H.lat, H.lng], { icon: L.divIcon({ className: '', html: `<div class="mk hotel" title="${esc(H.name)}">${ic('hotel')}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }), title: H.name, zIndexOffset: -50 }).addTo(layer)
+      .bindTooltip(`${esc(H.name)} · תחילת היום וסופו`, { direction: 'top', offset: [0, -12] });
+    if (line.length) L.polyline([[H.lat, H.lng], line[0]], { color: '#8A93A8', weight: 2, dashArray: '1 7', lineCap: 'round', opacity: 0.8 }).addTo(layer);
+    if (line.length) L.polyline([line[line.length - 1], [H.lat, H.lng]], { color: '#8A93A8', weight: 2, dashArray: '1 7', lineCap: 'round', opacity: 0.8 }).addTo(layer);
+  }
   overlayItems().forEach((o) => {
     const icon = L.divIcon({ className: '', html: `<div class="mk ov ${o.id === mapSel ? 'sel' : ''}" style="--c:${o.color}">${ic(o.kind)}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
     L.marker([o.lat, o.lng], { icon, title: o.name, zIndexOffset: -100 }).addTo(layer).on('click', () => { mapSel = o.id; mtOpen = null; drawMarkers(false); renderMapSheet(); haptic(6); });
@@ -1782,7 +1804,6 @@ const A = {
     const name = $('#ht-name').value.trim(); if (!name) { toast('צריך שם'); return; }
     const p = sheetCtx.pick || {};
     S.hotel = { name, address: $('#ht-addr').value.trim(), lat: p.lat ?? null, lng: p.lng ?? null };
-    S.days.forEach((d) => d.stops.forEach((s) => { if (s.hotelRef) { if (!s.keepName) s.name = name; s.lat = S.hotel.lat; s.lng = S.hotel.lng; } }));
     save(); closeSheet(); render(); toast('המלון נשמר');
   },
   budget: () => { sheet(`<h3>תקציב</h3><label class="lab">תקציב כולל (€)<input class="field" id="bg-v" inputmode="decimal" value="${S.budget}"></label><label class="lab">עמלת כרטיס אשראי (%)<input class="field" id="bg-f" inputmode="decimal" value="${S.cardFee}"></label><button class="btn sun" data-act="budgetSave">שמירה</button>`); },
