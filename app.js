@@ -90,7 +90,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '26 · 13.11';
+const VERSION = '27 · 13.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -170,6 +170,14 @@ const durOf = (s) => (s.dur != null ? s.dur : s.hotelRef ? 0 : DUR[s.kind] ?? 60
 function rawHours(s) { const r = s.rule && T.rules[s.rule]; if (r && r.raw) return r.raw; return (s.details && s.details.hoursRaw) || ''; }
 const atCity = (date, min) => new Date(`${date}T${fmtT(min)}:00+01:00`);
 // Walk through the day: travel by the chosen mode, wait for fixed entry times, check opening hours at arrival.
+// The whole day in Google Maps, walking: hotel → every stop in order → hotel.
+// The Google Maps app takes up to 10 points in one route, so a longer day is split into parts.
+function dayNavUrls(di) {
+  const H = hotelPt(); const pts = [...(H ? [H] : []), ...S.days[di].stops, ...(H ? [H] : [])];
+  if (pts.length < 2) return pts.length ? [gmDir(null, pts[0], 'walking')] : [];
+  const parts = []; for (let k = 0; k < pts.length - 1; k += 9) parts.push(pts.slice(k, k + 10));
+  return parts.map((p) => 'https://www.google.com/maps/dir/' + p.map((x) => q(x)).join('/') + '/data=!4m2!4m1!3e2');
+}
 // Every day starts and ends at the hotel (when its location is known)
 const hotelPt = () => (S.hotel && S.hotel.lat != null ? { id: 'hotel', kind: 'hotel', name: S.hotel.name || 'המלון', lat: S.hotel.lat, lng: S.hotel.lng } : null);
 function hotelLeg(a, b) { const L = legInfo(a, b); const mode = L.rec; return { mode, min: (mode === 'walk' ? L.walk : L.transit) || 0 }; }
@@ -522,7 +530,7 @@ V.today = () => {
     const L = legInfo(s, n); const key = s.id + '>' + n.id; const mode = S.legs[key] || L.rec;
     list += `<div class="tleg"><div class="tn"></div><div class="tlegc"><button class="lg ${mode === 'walk' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="walk">${ic('walk')}${L.walk ? `${L.walk} דק׳` : 'ברגל'}</button><button class="lg ${mode === 'transit' ? 'on' : ''}" data-act="leg" data-k="${key}" data-m="transit">${ic('metro')}${L.transit ? `≈${L.transit} דק׳` : 'תחבורה'}</button><a class="lg-go" href="${gmDir(s, n, mode === 'walk' ? 'walking' : 'transit')}" target="_blank" rel="noopener">ניווט ›</a></div></div>`;
   });
-  const H = hotelPt(); const dayUrl = 'https://www.google.com/maps/dir/' + (H ? [H, ...day.stops, H] : day.stops).map((s) => q(s)).join('/');
+  const H = hotelPt();
   const hName = esc((S.hotel && S.hotel.name) || 'המלון'); const mWord = (o) => (o.mode === 'walk' ? `${o.min} דק׳ ברגל` : `כ־${o.min} דק׳ בתחבורה`);
   const hStart = `<div class="thotel">${ic('hotel')}<span>${i === 0 ? 'צ׳ק־אין ב' : 'יוצאים מ'}${hName}${plan.out ? ` · ${mWord(plan.out)} לתחנה הראשונה` : ''}</span>${!H ? '<button class="lnk" data-act="hotelEdit">הוסף כתובת מלון</button>' : ''}</div>`;
   const hEnd = day.stops.length ? `<div class="thotel">${ic('hotel')}<span>${i === 4 ? `חוזרים ל${hName} לאסוף מזוודות${S.flights.back.time ? ` · לצאת לשדה עד <b dir="ltr">${leaveBy()}</b>` : ' ומשם לשדה'}` : `חזרה ל${hName}`}${plan.back ? ` · ${mWord(plan.back)}, בערך <b dir="ltr">${fmtT(plan.back.arrive)}</b>` : ''}</span></div>` : '';
@@ -535,7 +543,7 @@ V.today = () => {
   <div class="section">
     ${alerts.join('')}
     ${ideasBar}
-    <div class="row" style="margin-top:6px"><h2 class="grow">המסלול</h2><button class="chipbtn" data-act="sortDay">${ic('sort')}סדר</button><a class="chipbtn" href="#places">${ic('pen')}עריכה</a><a class="chipbtn" href="${dayUrl}" target="_blank" rel="noopener">${ic('pin')}כל היום</a></div>
+    <div class="row" style="margin-top:6px"><h2 class="grow">המסלול</h2><button class="chipbtn" data-act="sortDay">${ic('sort')}סדר</button><a class="chipbtn" href="#places">${ic('pen')}עריכה</a><button class="chipbtn" data-act="dayNav" data-d="${i}">${ic('pin')}כל היום בגוגל</button></div>
     <div class="timebar"><label for="day-start">יוצאים ב־</label><input type="time" id="day-start" value="${fmtT(toMin(S.dayStart[i]) ?? 570)}" data-d="${i}">${plan.length ? `<span class="grow">${plan.back ? 'במלון בערך' : 'סיום משוער'} <b>${fmtT(plan.back ? plan.back.arrive : plan[plan.length - 1].leave)}</b></span>` : ''}</div>
     ${hStart}
     ${list ? `<div class="tline">${list}</div>` : '<div class="card muted">אין עדיין מקומות ביום הזה. לחץ על "+ מקום".</div>'}
@@ -632,6 +640,7 @@ function mapTopInner() {
     ${mtOpen === 'lays' ? `<div class="mt-panel"><div class="ms-lays">${MAP_LAYERS.map(([k, t, c]) => { const n = mapLayers.has(k) ? layerItems(k) : null; return `<button class="pill ${mapLayers.has(k) ? 'on' : ''}" style="--c:${c}" data-act="mapLayer" data-k="${k}" aria-pressed="${mapLayers.has(k)}">${mapLayers.has(k) ? '✓ ' : ''}${t}${n ? (n.loading && !n.length ? ' · מחפש…' : ` · ${n.length}`) : ''}</button>`; }).join('')}</div><span class="muted" style="font-size:12px">השכבות מוצגות ליד המסלול של היום שבחרת. לחץ על סמן כדי לראות פרטים.</span></div>` : ''}
     ${mtOpen === 'route' ? `<div class="mt-panel"><div class="list">${items.map((x, n) => `<div class="li ${x.id === mapSel ? 'sel' : ''}" data-act="mapPick" data-id="${x.id}"><span class="ms-n" style="--c:${x.color}">${n + 1}</span><span class="tile" style="--c:${x.color}">${ic(x.kind)}</span><div class="grow"><div class="li-t">${esc(x.name)}</div>${x.note ? `<div class="li-m">${esc(cut(x.note, 44))}</div>` : ''}</div></div>`).join('') || '<div class="li muted">אין ביום הזה מקומות עם מיקום.</div>'}</div>
       <div class="thotel">${ic('hotel')}<span>${hotelPt() ? `היום מתחיל ונגמר ב${esc(S.hotel.name || 'מלון')} (הסמן האפור הקטן)` : 'הוסף כתובת מלון כדי שכל יום יתחיל וייגמר בו'}</span>${hotelPt() ? '' : '<button class="lnk" data-act="hotelEdit">הוספה</button>'}</div>
+      <button class="btn sun sm" data-act="dayNav" data-d="${mapDay}">${ic('walk')}ניווט לכל היום בגוגל מפות</button>
       <div class="edrow"><button class="chipbtn" data-act="mapSort">${ic('sort')}סדר לי את היום</button><button class="chipbtn" data-act="placeAdd" data-d="${mapDay}">${ic('plus')}הוסף מקום</button><span class="muted grow">או לחיצה ארוכה במפה</span></div></div>` : ''}`;
 }
 function mapCardInner() {
@@ -693,13 +702,13 @@ function drawMarkers(fit) {
     if (!isLayer()) mk.on('dragend', () => { const st = S.days[mapDay].stops.find((x) => x.id === s.id); if (!st) return; const old = { lat: st.lat, lng: st.lng }; const ll = mk.getLatLng(); st.lat = ll.lat; st.lng = ll.lng; delete st.details; delete st.osm; save(); drawMarkers(false); renderMapSheet(); haptic(10); toast(`${st.name} הוזז`, () => { st.lat = old.lat; st.lng = old.lng; save(); drawMarkers(false); renderMapSheet(); }); enrichStop(st, true); });
     line.push([s.lat, s.lng]);
   });
-  if (line.length > 1) L.polyline(line, { color: pts[0].color, weight: 4, dashArray: '2 10', lineCap: 'round' }).addTo(layer);
+  if (line.length > 1) { L.polyline(line, { color: '#fff', weight: 9, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(layer); L.polyline(line, { color: pts[0].color, weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(layer); }
   const H = hotelPt();
   if (H) {
     L.marker([H.lat, H.lng], { icon: L.divIcon({ className: '', html: `<div class="mk hotel" title="${esc(H.name)}">${ic('hotel')}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }), title: H.name, zIndexOffset: -50 }).addTo(layer)
       .bindTooltip(`${esc(H.name)} · תחילת היום וסופו`, { direction: 'top', offset: [0, -12] });
-    if (line.length) L.polyline([[H.lat, H.lng], line[0]], { color: '#8A93A8', weight: 2, dashArray: '1 7', lineCap: 'round', opacity: 0.8 }).addTo(layer);
-    if (line.length) L.polyline([line[line.length - 1], [H.lat, H.lng]], { color: '#8A93A8', weight: 2, dashArray: '1 7', lineCap: 'round', opacity: 0.8 }).addTo(layer);
+    if (line.length) L.polyline([[H.lat, H.lng], line[0]], { color: '#5E6780', weight: 3.5, dashArray: '2 8', lineCap: 'round', opacity: 0.9 }).addTo(layer);
+    if (line.length) L.polyline([line[line.length - 1], [H.lat, H.lng]], { color: '#5E6780', weight: 3.5, dashArray: '2 8', lineCap: 'round', opacity: 0.9 }).addTo(layer);
   }
   overlayItems().forEach((o) => {
     const icon = L.divIcon({ className: '', html: `<div class="mk ov ${o.id === mapSel ? 'sel' : ''}" style="--c:${o.color}">${ic(o.kind)}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
@@ -1713,6 +1722,12 @@ const A = {
     const c = sheetCtx; const name = $('#ah-name').value.trim(); if (!name) { toast('צריך שם למקום'); return; }
     const ns = { id: uid(), kind: c.k || 'star', name, note: '', lat: c.lat, lng: c.lng, osm: c.osm };
     S.days[c.day].stops.push(ns); save(); closeSheet(); mapDay = c.day; mapSel = ns.id; drawMarkers(false); renderMapSheet(); toast(`נוסף ליום ${META[c.day].short}`); enrichStop(ns, true);
+  },
+  dayNav: (e) => {
+    const di = +e.dataset.d; const urls = dayNavUrls(di); if (!urls.length) { toast('אין עדיין מקומות ביום הזה'); return; }
+    const n = S.days[di].stops.length + (hotelPt() ? 2 : 0);
+    if (urls.length === 1) { window.open(urls[0], '_blank', 'noopener'); return; }
+    sheet(`<h3>כל היום בגוגל מפות</h3><span class="muted">${n} נקודות${hotelPt() ? ', מהמלון ובחזרה' : ''}. גוגל מפות מקבל עד 10 נקודות במסלול אחד, אז היום מחולק ל־${urls.length} חלקים ברצף.</span>${urls.map((u, k) => `<a class="btn ${k ? 'soft' : 'sun'}" href="${u}" target="_blank" rel="noopener">${ic('walk')}חלק ${k + 1}</a>`).join('')}`);
   },
   mtOpen: (e) => { mtOpen = mtOpen === e.dataset.k ? null : e.dataset.k; renderMapSheet(); haptic(6); },
   msToggle: () => { mapSheet = mapSheet === 'peek' ? 'half' : 'peek'; const el = $('.msheet'); if (el) el.dataset.state = mapSheet; },
