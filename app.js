@@ -90,7 +90,7 @@ try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch (e) { S = fr
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('לא הצלחתי לשמור במכשיר'); } };
 const META = T.days;
-const VERSION = '29 · 13.11';
+const VERSION = '30 · 13.11';
 
 /* ---------- helpers ---------- */
 let toastT;
@@ -651,7 +651,7 @@ function mapCardInner() {
   if (sel.layer) return ovCard(sel);
   return `<div class="ms-sel"><div class="row"><span class="ms-n" style="--c:${sel.color}">${items.indexOf(sel) + 1}</span><span class="tile" style="--c:${sel.color}">${ic(sel.kind)}</span><div class="grow"><b>${esc(sel.name)}</b><div class="muted">${esc(sel.note || '')}</div></div><button class="icon-btn" data-act="mapClose" aria-label="סגירה">${ic('x')}</button></div>
       <div class="row"><a class="btn sun sm grow" href="${gmDir(null, sel, 'walking')}" target="_blank" rel="noopener">${ic('walk')}ברגל</a><a class="btn soft sm grow" href="${gmDir(null, sel, 'transit')}" target="_blank" rel="noopener">${ic('metro')}תחבורה</a><a class="btn soft sm" href="#place/${mapDay}/${sel.id}">על המקום</a></div>
-      <div class="edrow"><button class="chipbtn" data-act="mapMove" data-dir="-1" aria-label="מוקדם יותר">${ic('up')}מוקדם</button><button class="chipbtn" data-act="mapMove" data-dir="1" aria-label="מאוחר יותר">${ic('down')}מאוחר</button><button class="chipbtn" data-act="mapToDay">${ic('list')}ליום אחר</button><button class="chipbtn" data-act="mapEdit">${ic('pen')}עריכה</button>${sel.hotelRef ? '' : `<button class="chipbtn danger" data-act="mapDel">${ic('trash')}</button>`}</div>
+      <div class="edrow"><button class="chipbtn" data-act="mapMove" data-dir="-1" aria-label="מוקדם יותר">${ic('up')}מוקדם</button><button class="chipbtn" data-act="mapMove" data-dir="1" aria-label="מאוחר יותר">${ic('down')}מאוחר</button><button class="chipbtn" data-act="mapToDay">${ic('list')}ליום אחר</button><button class="chipbtn" data-act="mapEdit">${ic('pen')}עריכה</button><button class="chipbtn" data-act="mapUnplan">${ic('star')}להוציא ולשמור</button>${sel.hotelRef ? '' : `<button class="chipbtn danger" data-act="mapDel" aria-label="מחיקה">${ic('trash')}</button>`}</div>
       <span class="muted" style="font-size:12px">אפשר גם לגרור את הסמן במפה כדי להזיז את המקום.</span></div>`;
 }
 function addHereSheet(lat, lng) {
@@ -1050,9 +1050,25 @@ async function identify(x, text) {
   x.status = 'unknown'; save(); if (location.hash === '#saved') render();
   identifySheet(x);
 }
+// Take a place out of the day's route but keep it: it goes to Saved (favourites) with everything it had
+function unplanStop(di, id, after) {
+  const a = S.days[di].stops; const i = a.findIndex((x) => x.id === id); if (i < 0) return null;
+  const [st] = a.splice(i, 1);
+  let sv = st.savedId && S.saved.find((o) => o.id === st.savedId); let created = false;
+  if (!sv) {
+    sv = { id: uid(), title: st.name, name: st.name, url: st.url || gmSearch(st), fav: true, lat: st.lat ?? null, lng: st.lng ?? null, osm: st.osm || null, kind: st.kind || 'star', status: 'found', stopId: st.id, fromDay: di };
+    ['details', 'wikiFixed', 'gem', 'story', 'wiki', 'rule', 'info', 'booking', 'visited', 'time', 'dur', 'note'].forEach((k) => { if (st[k] != null) sv[k] = st[k]; });
+    S.saved.unshift(sv); created = true;
+  } else { sv.fav = true; sv.stopId = st.id; delete sv.day; }
+  save(); haptic(10);
+  toast(`"${cut(st.name, 22)}" הוצא מהיום ונשמר בשמורים ★`, () => { a.splice(i, 0, st); if (created) S.saved = S.saved.filter((o) => o.id !== sv.id); else delete sv.stopId; save(); if (after) after(true); else render(); });
+  if (after) after(false, sv);
+  return sv;
+}
 function addSavedToDay(x, di) {
-  const ns = { id: uid(), kind: x.kind || 'star', name: x.name || x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat ?? null, lng: x.lng ?? null, osm: x.osm || null, url: x.url, savedId: x.id };
+  const ns = { id: x.stopId && !allStops().some((o) => o.st.id === x.stopId) ? x.stopId : uid(), kind: x.kind || 'star', name: x.name || x.title || 'מקום מהשמורים', note: SRC[srcKind(x.url || '')][0], lat: x.lat ?? null, lng: x.lng ?? null, osm: x.osm || null, url: x.url, savedId: x.id };
   if (x.details) ns.details = x.details; if (x.wikiFixed) ns.wikiFixed = x.wikiFixed; if (x.gem) ns.gem = x.gem;
+  ['story', 'wiki', 'rule', 'info', 'booking', 'visited', 'time', 'dur'].forEach((k) => { if (x[k] != null) ns[k] = x[k]; }); if (x.note) ns.note = x.note;
   S.days[di].stops.push(ns); x.day = META[di].short; save(); render();
   if (!ns.details) enrichStop(ns, true);
   if (!hasGeo(ns)) { identifySheet(x); toast('נוסף. בוא נזהה את המקום כדי שיופיע במפה ובניווט'); } else toast(`נוסף ליום ${META[di].short} · מופיע במסלול, במפה ובניווט`);
@@ -1132,6 +1148,7 @@ V.place = (di, id) => {
     ${storyHTML(s, w)}
     ${hasGeo(s) && s.kind !== 'food' ? `<h2>טבעוני וללא גלוטן קרוב</h2>${nearest(VEG_FOOD(), s, 3).map((f) => `<div class="card row"><span class="tile" style="--c:var(--teal)">${ic('food')}</span><div class="grow"><div style="font-weight:800">${esc(f.name)}</div><div class="muted">${fmtKm(f.dist)} · ${esc(f.note)}</div></div><a class="icon-btn" href="${gmDir(s, f, 'walking')}" target="_blank" rel="noopener" aria-label="ניווט">${ic('pin')}</a></div>`).join('')}` : ''}
     <div class="row"><a class="btn soft sm grow" href="${gmSearch(s)}" target="_blank" rel="noopener">תמונות וביקורות ב־Google Maps</a>${fromSaved ? `<button class="btn soft sm" data-act="savedIdentify" data-id="${s.id}">${ic('pen')}מקום אחר</button>` : `<button class="btn soft sm" data-act="placeEditById" data-d="${di}" data-id="${s.id}">${ic('pen')}עריכה</button>`}</div>
+    ${!fromSaved ? `<button class="btn soft sm" data-act="unplan" data-d="${di}" data-id="${s.id}">${ic('star')}להוציא מהיום, ולשמור בשמורים</button>` : ''}
   </div>`;
 };
 
@@ -1742,6 +1759,8 @@ const A = {
   mapMove: (e) => { const a = S.days[mapDay].stops; const i = a.findIndex((x) => x.id === mapSel); const j = i + +e.dataset.dir; if (i < 0 || j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; save(); drawMarkers(false); renderMapSheet(); },
   mapToDay: () => { const from = mapDay; const st = S.days[from].stops.find((x) => x.id === mapSel); if (!st) return; daySheet((di) => { if (di === from) return; S.days[from].stops = S.days[from].stops.filter((x) => x.id !== st.id); S.days[di].stops.push(st); save(); mapSel = null; drawMarkers(false); renderMapSheet(); toast(`${st.name} עבר ליום ${META[di].short}`, () => { S.days[di].stops = S.days[di].stops.filter((x) => x.id !== st.id); S.days[from].stops.push(st); save(); drawMarkers(false); renderMapSheet(); }); }); },
   mapEdit: () => { const i = S.days[mapDay].stops.findIndex((x) => x.id === mapSel); if (i >= 0) placeSheet(mapDay, i); },
+  mapUnplan: () => { unplanStop(mapDay, mapSel, () => { mapSel = null; drawMarkers(false); renderMapSheet(); }); },
+  unplan: (e) => { const di = +e.dataset.d, id = e.dataset.id; unplanStop(di, id, (undone, sv) => { location.replace(undone ? `#place/${di}/${id}` : '#place/s/' + sv.id); }); },
   mapDel: () => { const a = S.days[mapDay].stops; const i = a.findIndex((x) => x.id === mapSel); if (i < 0) return; const d = mapDay; const [x] = a.splice(i, 1); save(); mapSel = null; drawMarkers(false); renderMapSheet(); toast(`"${x.name}" נמחק`, () => { S.days[d].stops.splice(i, 0, x); save(); drawMarkers(false); renderMapSheet(); }); },
   mapSort: () => { A.sortDay({ dataset: { d: mapDay } }); drawMarkers(true); renderMapSheet(); },
   ahDay: (e) => { sheetCtx.day = +e.dataset.i; document.querySelectorAll('#ah-days button').forEach((b) => b.classList.toggle('on', +b.dataset.i === sheetCtx.day)); },
