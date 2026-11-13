@@ -636,3 +636,10 @@ body:has(.mcard.on) .map-loc { display: none; }
 .mt-row { grid-template-columns: 1.3fr auto 1fr; }
 .mt-s { justify-content: center; padding: 7px 9px; }
 a.li { text-decoration: none; color: inherit; }
+/* v29: cleanup */
+.mgrp { margin: 10px 2px 0; font-size: 15px; color: var(--muted); }
+.alert.sum { width: 100%; border: 0; font: inherit; text-align: right; cursor: pointer; }
+.alerts-open { display: flex; flex-direction: column; gap: 6px; animation: rise .25s var(--ease) both; }
+.gbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.jend.card { display: flex; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; }
+a.chip { text-decoration: none; }

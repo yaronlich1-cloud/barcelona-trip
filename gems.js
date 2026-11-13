@@ -2,6 +2,15 @@
 // score = our rating out of 5. crowd: 1 quiet, 2 some visitors, 3 busy. Prices and hours are approximate:
 // check the official site a few days before. wiki = English Wikipedia title (photos, story and popularity).
 window.GEMS = [
+  { id: 'paradiso', name: 'Paradiso', he: 'פרדיסו', cat: ['night'], kind: 'bar', lat: 41.38367, lng: 2.18370, area: 'El Born · Rera Palau 4', score: 4.7, crowd: 3, dur: 'שעה–שעתיים', price: 'קוקטייל כ־15 €', best: 'מוקדם בערב, לפני התור', wiki: '',
+    bg: 'בר קוקטיילים שנכנסים אליו דרך דלת של מקרר, בתוך חנות פסטרמה קטנה. בפנים חלל מעוגל מעץ, וקוקטיילים שמגיעים בהגשה תיאטרלית. מקום 4 ברשימת 50 הברים הטובים בעולם 2025.',
+    go: 'חוויה, לא רק משקה. 5 דקות מסנטה מריה דל מאר.', skip: 'מי שלא אוהב לחכות בתור. בסופ״ש התור ארוך.' },
+  { id: 'sips', name: 'Sips', he: 'סיפס', cat: ['night'], kind: 'bar', lat: 41.38887, lng: 2.15672, area: 'Eixample · Muntaner', score: 4.6, crowd: 3, dur: 'שעה–שעתיים', price: 'קוקטייל כ־16 €', best: 'בפתיחה, כדי לתפוס מקום', wiki: '',
+    bg: 'בר קוקטיילים קטן ומואר שבו מכינים את המשקאות על בר מרכזי מול הלקוחות, עם טעמים לא צפויים. מקום 3 ברשימת 50 הברים הטובים בעולם 2025.',
+    go: 'לראות ברמנים ברמה עולמית עובדים מקרוב.', skip: 'מי שמחפש מקום שקט לשיחה ארוכה.' },
+  { id: 'monk', name: 'Monk Barcelona', he: 'מונק', cat: ['night'], kind: 'bar', lat: 41.38330, lng: 2.18147, area: 'El Born · Abaixadors 10', score: 4.3, crowd: 2, dur: 'שעה', price: 'קוקטייל כ־12 €', best: 'בערב', wiki: '',
+    bg: 'בר נסתר מאחורי חזית של מכולת שכונתית ברובע הבורן. אווירה אינטימית ותפריט קוקטיילים קצר.',
+    go: 'בר "סודי" בלי התורים של המפורסמים.', skip: '' },
   { id: 'santpau', name: 'Sant Pau Recinte Modernista', he: 'מתחם סנט פאו', cat: ['arch'], kind: 'gaudi', lat: 41.4118, lng: 2.1744, area: 'Guinardó', score: 4.8, crowd: 1, dur: 'שעה וחצי', price: 'כ־17 €', best: 'בוקר, באור טבעי', wiki: 'Hospital_de_la_Santa_Creu_i_Sant_Pau',
     bg: 'בית חולים שתכנן דומנק אי מונטנר, המתחרה הגדול של גאודי, ופעל עד 2009. 12 ביתנים מחוברים במנהרות, עם כיפות פסיפס, רצפות קרמיקה וגנים.',
     go: 'יפה כמו גאודי, בלי הצפיפות. 15 דקות הליכה מסגרדה פמיליה בשדרה אחת ישרה.', skip: 'מי שכבר עייף מאדריכלות מודרניסטית.' },
@@ -114,4 +123,4 @@ window.GEMS = [
     bg: 'מחצבה ישנה שהפכה לפארק. מעל האגם תלוי על כבלים פסל בטון ענק של אדוארדו צ׳יילידה.',
     go: 'פסל מרחף ושקט, 15 דקות הליכה מפארק גואל.', skip: '' }
 ];
-window.GEM_CATS = [['all', 'הכל'], ['arch', 'אדריכלות'], ['view', 'תצפיות'], ['history', 'היסטוריה'], ['art', 'אמנות'], ['market', 'שווקים'], ['green', 'גנים'], ['odd', 'נסתר ומוזר']];
+window.GEM_CATS = [['all', 'הכל'], ['arch', 'אדריכלות'], ['view', 'תצפיות'], ['history', 'היסטוריה'], ['art', 'אמנות'], ['market', 'שווקים'], ['green', 'גנים'], ['odd', 'נסתר ומוזר'], ['night', 'ברים ולילה']];
